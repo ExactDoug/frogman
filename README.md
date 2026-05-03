@@ -33,7 +33,7 @@ Verify it's installed:
 
 ```bash
 fwconsole ma list | grep frogman
-# | frogman | 1.0.0 | Enabled | AGPLv3+ | Unsigned |
+# | frogman | x.x.x | Enabled | AGPLv3+ | Unsigned |
 ```
 
 ### Post-Install (Optional)
