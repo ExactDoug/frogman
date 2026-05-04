@@ -57,7 +57,7 @@ class ChatParser {
 		}
 	}
 
-	public static function parse($message, $sessionId = 'default') {
+	public static function parse($message, $sessionId = 'default', $skipFuzzy = false) {
 		$msg = trim($message);
 		$lower = strtolower($msg);
 
@@ -1167,8 +1167,10 @@ class ChatParser {
 
 		// ── Fuzzy Intent Matching ──
 		// Normalize synonyms and try keyword extraction before giving up
-		$result = self::fuzzyMatch($msg, $lower, $sessionId);
-		if ($result) return $result;
+		if (!$skipFuzzy) {
+			$result = self::fuzzyMatch($msg, $lower, $sessionId);
+			if ($result) return $result;
+		}
 
 		// Questions ending with ? — try the knowledge base
 		if (substr(trim($msg), -1) === '?') {
@@ -1195,8 +1197,12 @@ class ChatParser {
 			'/\b(exts?|extensions?|phone|phones|handset)\b/i' => 'extension',
 			'/\b(ring\s*groups?|rgs?)\b/i' => 'ringgroup',
 			'/\b(vm|voicemails?|mailbox|mailboxes)\b/i' => 'voicemail',
-			'/\b(routes?|did|dids|inbound)\b/i' => 'inbound routes',
-			'/\b(outbound)\s+(routes?)/i' => 'outbound routes',
+			// Outbound first so its routes? gets claimed before the inbound pattern runs
+			'/\boutbound\s+routes?\b/i' => 'outbound routes',
+			'/\binbound\s+routes?\b/i' => 'inbound routes',
+			'/\b(dids?)\b/i' => 'inbound routes',
+			// Bare "inbound" (not already followed by route/routes) → inbound routes
+			'/\binbound\b(?!\s+routes?\b)/i' => 'inbound routes',
 			'/\b(fw|firewall|iptables)\b/i' => 'firewall',
 			'/\b(cdr|call\s*log|call\s*history|call\s*records?)\b/i' => 'call history',
 			'/\b(calls?|channels?)\s+(active|live|current|now)\b/i' => 'active calls',
@@ -1209,9 +1215,9 @@ class ChatParser {
 		}
 		$normalized = preg_replace('/\s+/', ' ', trim($normalized));
 
-		// If normalization changed something, retry parsing
+		// If normalization changed something, retry parsing (skip fuzzy to avoid recursion blowup)
 		if ($normalized !== $lower) {
-			$retry = self::parse($normalized, $sessionId);
+			$retry = self::parse($normalized, $sessionId, true);
 			if (!isset($retry['response']) || strpos($retry['response'], "don't understand") === false) {
 				return $retry;
 			}
@@ -1232,7 +1238,7 @@ class ChatParser {
 			'ivr' => ['ivr', 'ivrs', 'menu', 'menus'],
 			'conference' => ['conference', 'conferences', 'conf'],
 			'voicemail' => ['voicemail', 'voicemails', 'vm', 'mailbox'],
-			'route' => ['route', 'routes', 'did', 'dids'],
+			'route' => ['route', 'routes', 'did', 'dids', 'inbound'],
 		];
 
 		$foundAction = null;
@@ -1261,6 +1267,17 @@ class ChatParser {
 
 		// Map to commands
 		if ($foundAction && $foundObject) {
+			$key = "{$foundAction}:{$foundObject}";
+
+			// Syntax prompts for commands that need extra args (clickable examples)
+			$syntaxPrompts = [
+				'create:route' => "To create an inbound route, type: `add inbound route <DID> to <ext>`\n\nExample: {{cmd:add inbound route 5551234567 to 1001|Try this}}",
+				'delete:route' => "To remove an inbound route, type: `remove inbound route <DID>`\n\nExample: {{cmd:remove inbound route 5551234567|Try this}}",
+			];
+			if (isset($syntaxPrompts[$key])) {
+				return ['response' => $syntaxPrompts[$key]];
+			}
+
 			$toolMap = [
 				'list:extension' => 'list extensions',
 				'list:ringgroup' => 'list ringgroups',
@@ -1273,9 +1290,8 @@ class ChatParser {
 				'diagnose:extension' => $foundNumber ? "diagnose ext {$foundNumber}" : null,
 				'diagnose:trunk' => $foundNumber ? "diagnose trunk {$foundNumber}" : null,
 			];
-			$key = "{$foundAction}:{$foundObject}";
 			if (isset($toolMap[$key]) && $toolMap[$key]) {
-				$retry = self::parse($toolMap[$key], $sessionId);
+				$retry = self::parse($toolMap[$key], $sessionId, true);
 				if (!isset($retry['response']) || strpos($retry['response'], "don't understand") === false) {
 					return $retry;
 				}

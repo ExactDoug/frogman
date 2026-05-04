@@ -1,13 +1,14 @@
 <module>
 	<rawname>frogman</rawname>
 	<name>Frogman</name>
-	<version>1.0.0</version>
+	<version>1.1.0</version>
 	<publisher>Frogman Project</publisher>
 	<license>AGPLv3</license>
 	<licenselink>https://www.gnu.org/licenses/agpl-3.0.txt</licenselink>
 	<category>Admin</category>
-	<description>Complete PBX control through natural language from a web console, chat platforms, MCP, or any API client. 211 tools built entirely on FreePBX's native interfaces (BMO, GraphQL, AMI, fwconsole).</description>
+	<description>Complete PBX control through natural language from a web console, chat platforms, MCP, or any API client. 212 tools built entirely on FreePBX's native interfaces (BMO, GraphQL, AMI, fwconsole).</description>
 	<changelog>
+		*1.1.0* Add fm_whos_on_the_phone (212 tools); fix ChatParser OOM from recursive synonym expansion on "create inbound route"; route questions ending with "?" to KB search; security: shell injection fix in FwconsoleCmd, AMI allowlist, input sanitization; tool prefix oc_ → fm_
 		*1.0.0* Initial release: 211 tools, MCP server, web console, CLI chat, knowledge base RAG, call flow visualizer, API token auth
 	</changelog>	<depends>
 		<version>17.0.1</version>
