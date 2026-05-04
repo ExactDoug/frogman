@@ -1377,6 +1377,21 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 				}
 				return implode("\n", $lines);
 
+			case 'fm_whos_on_the_phone':
+				if (empty($data['calls'])) return "📞 Nobody is on the phone right now.";
+				$lines = ["📞 **On the Phone** ({$data['count']}):"];
+				foreach ($data['calls'] as $c) {
+					$who = $c['name'] ?? $c['ext'] ?? $c['callerid'] ?? 'Unknown';
+					$dur = $c['duration'] > 0 ? gmdate('i:s', $c['duration']) : '0:00';
+					if (!empty($c['talking_to'])) {
+						$partner = $c['talking_to']['name'] ?? $c['talking_to']['ext'] ?? $c['talking_to']['callerid'] ?? 'Unknown';
+						$lines[] = "  🔴 **{$who}** ↔ **{$partner}** ({$dur})";
+					} else {
+						$lines[] = "  🟡 **{$who}** — {$c['state']} ({$dur})";
+					}
+				}
+				return implode("\n", $lines);
+
 			case 'fm_system_dashboard':
 				$lines = ["📊 **System Status**"];
 				if (!empty($data['version'])) $lines[] = "  📦 Asterisk `{$data['version']}`";

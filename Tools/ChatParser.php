@@ -135,6 +135,11 @@ class ChatParser {
 			return ['tool' => 'fm_trace_call_flow', 'params' => [$key => $val]];
 		}
 
+		// ── Who's on the phone ──
+		if (preg_match('/^(who.s\s+on\s+the\s+phone|who.s\s+talking|who.s\s+on\s+a\s+call|current\s+calls|live\s+calls)$/i', $lower)) {
+			return ['tool' => 'fm_whos_on_the_phone', 'params' => []];
+		}
+
 		// ── Search ──
 		if (preg_match('/^(kb|docs|knowledge\s*base|how\s+do\s+i|how\s+to|troubleshoot)\s+(.+)$/i', $msg, $m)) {
 			return ['tool' => 'fm_search_docs', 'params' => ['query' => trim($m[2])]];
