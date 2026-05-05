@@ -229,7 +229,13 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 		$followUp = $this->getFollowUpOffer($toolName, $result, $params);
 		if ($followUp) {
 			require_once __DIR__ . '/Tools/ChatParser.php';
-			\FreePBX\modules\Frogman\ChatParser::setFollowUp($sessionId, $followUp['tool'], $followUp['params']);
+			\FreePBX\modules\Frogman\ChatParser::setFollowUp(
+				$sessionId,
+				$followUp['tool'],
+				$followUp['params'],
+				$followUp['needs_input'] ?? null,
+				$followUp['input_prompt'] ?? null
+			);
 			$reply .= "\n\n" . $followUp['question'] . "\n{{cmd:yes|✅ Yes}} {{cmd:no|❌ No}}";
 		}
 
@@ -994,6 +1000,18 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 
 			case 'fm_update_activation':
 				$lic = $data['license'] ?? [];
+				// Background mode: tool kicked off `fwconsole sa activate` async because
+				// it restarts apache. Skip the System/Activation block (would be misleading
+				// mid-restart) and surface a clickable sc status follow-up.
+				if (!empty($data['background'])) {
+					$msg = $data['message'] ?? 'Activation refresh started.';
+					$msg = str_replace('`sc status`', '{{cmd:sc status|sc status}}', $msg);
+					$lines = ["✅ **{$msg}**"];
+					if (!empty($data['deployment_id'])) {
+						$lines[] = "  🔑 Deployment: `{$data['deployment_id']}`";
+					}
+					return implode("\n", $lines);
+				}
 				$lines = ["✅ **{$data['message']}**"];
 
 				// System info (always available from BMO)
@@ -1380,6 +1398,80 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 				}
 				return implode("\n", $lines);
 
+			case 'fm_sc_status':
+				if (empty($data['installed'])) {
+					return "🔴 **Sangoma Connect:** not installed.";
+				}
+				$lic = $data['license'];
+				$dom = $data['domain'];
+				$crt = $data['cert'];
+				$usr = $data['users'];
+				$lines = ["**Sangoma Connect:**"];
+
+				$licOk = $lic['licensed'] && !$lic['expired'];
+				if (!$licOk) {
+					$exp = $lic['expires'] ? " (expired {$lic['expires']})" : '';
+					$lines[] = "  🔴 License: invalid{$exp}";
+				} else {
+					$lines[] = "  🟢 License: valid until {$lic['expires']}";
+				}
+
+				$domVal = $dom['domain'] !== '' ? $dom['domain'] : '(none)';
+				if ($dom['status']) {
+					$lines[] = "  🟢 Domain: `{$domVal}` — running | proxy: {$dom['proxy_status']}";
+				} elseif ($dom['domain'] !== '') {
+					$lines[] = "  🟡 Domain: `{$domVal}` — not running | proxy: {$dom['proxy_status']}";
+				} else {
+					$lines[] = "  🔴 Domain: not configured | proxy: {$dom['proxy_status']}";
+				}
+
+				if ($crt['exists']) {
+					$certTypeLabels = ['ss' => 'Self-Signed', 'le' => "Let's Encrypt", 'up' => 'Uploaded', 'csr' => 'CSR'];
+					$certType = $certTypeLabels[$crt['type'] ?? ''] ?? ($crt['type'] ?: 'Unknown');
+					$lines[] = "  🟢 Cert: `{$crt['basename']}` ({$certType})";
+				} else {
+					$lines[] = "  🔴 Cert: none — required for SCD/Talk";
+				}
+
+				$cap = (int)$lic['seat_cap'];
+				$used = (int)$usr['distinct_users'];
+				$free = (int)$usr['free_seats'];
+				if ($cap <= 0) {
+					$seatIcon = '🔴'; $seatText = 'no seats licensed';
+				} elseif ($free <= 0) {
+					$seatIcon = '🔴'; $seatText = "{$used}/{$cap} seats — exhausted";
+				} elseif ($free <= 1) {
+					$seatIcon = '🟡'; $seatText = "{$used}/{$cap} seats ({$free} free)";
+				} else {
+					$seatIcon = '🟢'; $seatText = "{$used}/{$cap} seats ({$free} free)";
+				}
+				$lines[] = "  {$seatIcon} Users: {$usr['scd_count']} SCD, {$usr['talk_count']} Talk — {$seatText}";
+
+				$nextMap = [
+					'license_invalid'    => ['🔴', "License is invalid or expired. [Purchase Sangoma Connect seats](https://portal.sangoma.com/store/searchStore?search=softphones) to enable users."],
+					'cert_required'      => ['🔴', "Need a TLS cert. {{cmd:list certificates|See existing}} or issue one in Certificate Manager."],
+					'domain_not_running' => ['🟡', "Cert OK but SC domain isn't running. Bring it up before enabling users."],
+					'license_exhausted'  => ['🟡', "All seats used. [Add more seats](https://portal.sangoma.com/store/searchStore?search=softphones) or remove a user before enabling more."],
+					'ready'              => ['🟢', "**Ready to enable users.**"],
+					'module_missing'     => ['🔴', "Module not installed."],
+				];
+				if (isset($nextMap[$data['next_step']])) {
+					[$icon, $text] = $nextMap[$data['next_step']];
+					$lines[] = "  {$icon} → {$text}";
+				}
+				return implode("\n", $lines);
+
+			case 'fm_set_extension_email':
+				if (!empty($data['error'])) {
+					return "🔴 **Set email:** {$data['error']}";
+				}
+				$icon = !empty($data['success']) ? '🟢' : '🟡';
+				$lines = ["{$icon} **{$data['message']}**"];
+				if (!empty($data['previous_email']) && $data['previous_email'] !== ($data['email'] ?? '')) {
+					$lines[] = "  Previous: `{$data['previous_email']}`";
+				}
+				return implode("\n", $lines);
+
 			case 'fm_whos_on_the_phone':
 				if (empty($data['calls'])) return "📞 Nobody is on the phone right now.";
 				$lines = ["📞 **On the Phone** ({$data['count']}):"];
@@ -1682,6 +1774,37 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 				];
 
 			case 'fm_enable_voicemail':
+				$vmExt = $params['ext'] ?? $data['ext'] ?? null;
+				if ($vmExt) {
+					$umUser = null;
+					try { $umUser = $this->freepbx->Userman->getUserByDefaultExtension($vmExt); } catch (\Throwable $e) {}
+					$hasEmail = is_array($umUser) && !empty($umUser['email']);
+					if (!$hasEmail) {
+						return [
+							'tool' => 'fm_set_extension_email',
+							'params' => ['ext' => $vmExt, '_chain_reload' => true],
+							'question' => "Would you also like to add an email for {$vmExt}?",
+							'needs_input' => 'email',
+							'input_prompt' => "What email address? {{cmd:skip|⏭ Skip}}",
+						];
+					}
+				}
+				return [
+					'tool' => 'fm_reload',
+					'params' => [],
+					'question' => "Would you like to apply the changes now?",
+				];
+
+			case 'fm_set_extension_email':
+				if (!empty($params['_chain_reload'])) {
+					return [
+						'tool' => 'fm_reload',
+						'params' => [],
+						'question' => "Would you like to apply the changes now?",
+					];
+				}
+				return null;
+
 			case 'fm_add_ringgroup':
 			case 'fm_add_inbound_route':
 			case 'fm_dialplan_apply':

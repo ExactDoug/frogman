@@ -1,13 +1,14 @@
 <module>
 	<rawname>frogman</rawname>
 	<name>Frogman</name>
-	<version>1.2.0</version>
+	<version>1.2.1</version>
 	<publisher>Frogman Project</publisher>
 	<license>AGPLv3</license>
 	<licenselink>https://www.gnu.org/licenses/agpl-3.0.txt</licenselink>
 	<category>Admin</category>
-	<description>Complete PBX control through natural language from a web console, chat platforms, MCP, or any API client. 218 tools built entirely on FreePBX's native interfaces (BMO, GraphQL, AMI, fwconsole).</description>
+	<description>Complete PBX control through natural language from a web console, chat platforms, MCP, or any API client. 220 tools built entirely on FreePBX's native interfaces (BMO, GraphQL, AMI, fwconsole).</description>
 	<changelog>
+		*1.2.1* Sangoma Connect status + email-onboarding chain (220 tools): fm_sc_status (SC preflight diagnostic — license, domain, cert, seats, next-step hint with clickable purchase/cert links), fm_set_extension_email (dual-layer email update — userman + voicemail-to-email via Voicemail::updateMailbox), fm_add_extension now always creates a linked User Manager user, fm_update_activation rewritten to use the deployment-ID-based fwconsole activate command (full GUI-equivalent handshake, backgrounded for chat compat — fixes stale-license-cache bug). New ChatParser pending_input mechanism for free-text follow-ups: voicemail-enable → "Add email?" → input prompt with clickable Skip → reload chain. Chat: "sc status", "sangoma connect status", "set email 1099 a@b.com", "add ext 1100 name Foo email a@b.com".
 		*1.2.0* Tier 1 Sangoma/DPMA tools (218 tools): fm_diagnose_sangoma_phone (composite — EPM mapping, license, registration, DPMA state, firmware audit, alerts), fm_list_sangoma_phones, fm_get_sangoma_phone, fm_dpma_alerts, fm_dpma_license_status, fm_reboot_sangoma_phone. Chat: "diagnose sangoma 1005", "list sangoma phones", "sangoma phone 1005", "dpma alerts", "dpma license", "reboot sangoma 1005". All BMO-first, AMI for runtime state, no shell-outs.
 		*1.1.1* Cap chat/MCP entry points at 256MB so a runaway tool/parser bug fails in ~1s instead of stalling Apache workers
 		*1.1.0* Add fm_whos_on_the_phone (212 tools); fix ChatParser OOM from recursive synonym expansion on "create inbound route"; route questions ending with "?" to KB search; security: shell injection fix in FwconsoleCmd, AMI allowlist, input sanitization; tool prefix oc_ → fm_

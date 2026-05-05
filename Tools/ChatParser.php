@@ -43,9 +43,14 @@ class ChatParser {
 		$sth->execute([$sessionId]);
 	}
 
-	public static function setFollowUp($sessionId, $tool, $params) {
+	public static function setFollowUp($sessionId, $tool, $params, $needsInput = null, $inputPrompt = null) {
 		$db = self::getDb();
-		$data = json_encode(['tool' => $tool, 'params' => $params, 'type' => 'followup']);
+		$payload = ['tool' => $tool, 'params' => $params, 'type' => 'followup'];
+		if ($needsInput) {
+			$payload['needs_input'] = $needsInput;
+			if ($inputPrompt) $payload['input_prompt'] = $inputPrompt;
+		}
+		$data = json_encode($payload);
 		$sth = $db->prepare("SELECT id FROM oc_sessions WHERE id = ?");
 		$sth->execute([$sessionId]);
 		if ($sth->fetch()) {
@@ -57,17 +62,68 @@ class ChatParser {
 		}
 	}
 
+	private static function getInputPending($sessionId) {
+		$db = self::getDb();
+		$sth = $db->prepare("SELECT context FROM oc_sessions WHERE id = ? AND status = 'pending_input'");
+		$sth->execute([$sessionId]);
+		$row = $sth->fetch(\PDO::FETCH_ASSOC);
+		if ($row && !empty($row['context'])) {
+			return json_decode($row['context'], true);
+		}
+		return null;
+	}
+
+	public static function setInputPrompt($sessionId, $tool, $params, $inputParam) {
+		$db = self::getDb();
+		$data = json_encode([
+			'tool' => $tool,
+			'params' => $params,
+			'type' => 'input',
+			'input_param' => $inputParam,
+		]);
+		$sth = $db->prepare("SELECT id FROM oc_sessions WHERE id = ?");
+		$sth->execute([$sessionId]);
+		if ($sth->fetch()) {
+			$sth = $db->prepare("UPDATE oc_sessions SET context = ?, status = 'pending_input', last_activity = ? WHERE id = ?");
+			$sth->execute([$data, time(), $sessionId]);
+		} else {
+			$sth = $db->prepare("INSERT INTO oc_sessions (id, user_id, started_at, last_activity, context, status) VALUES (?, NULL, ?, ?, ?, 'pending_input')");
+			$sth->execute([$sessionId, time(), time(), $data]);
+		}
+	}
+
 	public static function parse($message, $sessionId = 'default', $skipFuzzy = false) {
 		$msg = trim($message);
 		$lower = strtolower($msg);
+
+		// ── Free-text Input Prompt (e.g. "what email?") ──
+		// Must come BEFORE yes/no so a yes-as-value still works as input.
+		$inputPending = self::getInputPending($sessionId);
+		if ($inputPending) {
+			if (preg_match('/^(no|cancel|skip|nevermind|nope|abort)$/i', $msg)) {
+				self::clearPending($sessionId);
+				return ['response' => 'OK, skipped.'];
+			}
+			self::clearPending($sessionId);
+			$param = $inputPending['input_param'] ?? 'value';
+			$inputPending['params'][$param] = $msg;
+			$inputPending['params']['confirm'] = true;
+			return ['tool' => $inputPending['tool'], 'params' => $inputPending['params']];
+		}
 
 		// ── Confirm / Cancel ──
 		$pending = self::getPending($sessionId);
 		if ($pending && preg_match('/^(yes|y|confirm|do it|go|go ahead|ok|sure|yep|yeah)$/i', $msg)) {
 			self::clearPending($sessionId);
+			// If pending has needs_input, transition to input-prompt instead of firing the tool
+			if (!empty($pending['needs_input'])) {
+				$param = $pending['needs_input'];
+				$prompt = $pending['input_prompt'] ?? "What's the {$param}?";
+				self::setInputPrompt($sessionId, $pending['tool'], $pending['params'], $param);
+				return ['response' => $prompt];
+			}
 			$isFollowUp = !empty($pending['type']) && $pending['type'] === 'followup';
 			if ($isFollowUp) {
-				// Follow-ups execute directly — user already said yes
 				$pending['params']['confirm'] = true;
 				return ['tool' => $pending['tool'], 'params' => $pending['params']];
 			}
@@ -164,6 +220,21 @@ class ChatParser {
 		if (preg_match('/^(health|status)\s+check\s+(on\s+)?(\d+)$/i', $msg, $m)) {
 			return ['tool' => 'fm_get_extension_health', 'params' => ['ext' => $m[3]]];
 		}
+		// ── Combo: extension + email (must come before name-only patterns to avoid the trailing-words greedy match) ──
+		if (preg_match('/^(create|add|new)\s+(ext|extension)\s+(\d+)\s+(?:for\s+|named?\s+)?(.+?)\s+email\s+(\S+@\S+\.\S+)$/i', $msg, $m)) {
+			$params = ['ext' => $m[3], 'name' => rtrim(trim($m[4]), '.'), 'email' => $m[5]];
+			self::setPending($sessionId, 'fm_add_extension', $params);
+			return ['tool' => 'fm_add_extension', 'params' => $params];
+		}
+
+		// ── Set extension email standalone ──
+		// "set email 1099 foo@bar.com" / "set extension email 1099 foo@bar.com" / "email 1099 foo@bar.com"
+		if (preg_match('/^(?:set\s+)?(?:extension\s+)?email\s+(?:for\s+)?(\d+)\s+(\S+@\S+\.\S+)$/i', $msg, $m)) {
+			$params = ['ext' => $m[1], 'email' => $m[2]];
+			self::setPending($sessionId, 'fm_set_extension_email', $params);
+			return ['tool' => 'fm_set_extension_email', 'params' => $params];
+		}
+
 		// ── Combo: extension + voicemail ──
 		if (preg_match('/^(create|add|new)\s+(ext|extension)\s+(\d+)\s+(?:(?:with|and)\s+)?(?:voicemail|vm)\s+(?:for\s+|named?\s+)?(.+)$/i', $msg, $m)) {
 			$params = ['ext' => $m[3], 'name' => rtrim(trim($m[4]), '.'), 'vm' => 'yes'];
@@ -879,6 +950,13 @@ class ChatParser {
 		if (preg_match('/^list\s+(cert|certificate|ssl|tls)s?$/i', $lower)) {
 			return ['tool' => 'fm_list_certificates', 'params' => []];
 		}
+
+		// ── Sangoma Connect status ──
+		if (preg_match('/^(sc|sangoma\s*connect)\s+(status|info|state|check|health|preflight)$/i', $lower)
+			|| preg_match('/^(check|show|get)\s+(sc|sangoma\s*connect)(\s+status)?$/i', $lower)) {
+			return ['tool' => 'fm_sc_status', 'params' => []];
+		}
+
 
 		// ── Filestores ──
 		if (preg_match('/^list\s+(filestore|storage)s?$/i', $lower)) {

@@ -1,6 +1,6 @@
 # Frogman 🐸
 
-**Headless PBX control through MCP and HTTP API.** Any AI, bot, or app connects and manages FreePBX through 218 tools. No GraphQL needed.
+**Headless PBX control through MCP and HTTP API.** Any AI, bot, or app connects and manages FreePBX through 220 tools. No GraphQL needed.
 
 Connect via MCP and ask "why can't extension 101 make calls?" — Frogman runs live diagnostics, searches its built-in knowledge base, and hands the AI everything it needs to answer.
 
@@ -51,9 +51,9 @@ This is optional — all other tools work without it. Without this, service tool
 
 ## Architecture
 
-Frogman is the MCP server — the AI interface to the PBX. Frogman is the FreePBX module that provides the 218 tools it exposes. Together, they have two interfaces:
+Frogman is the MCP server — the AI interface to the PBX. Frogman is the FreePBX module that provides the 220 tools it exposes. Together, they have two interfaces:
 
-- **MCP Server** — the core product. Any AI connects via MCP and uses 218 tools to control, diagnose, and troubleshoot the PBX. This is where RAG, reasoning, and intelligent support happen.
+- **MCP Server** — the core product. Any AI connects via MCP and uses 220 tools to control, diagnose, and troubleshoot the PBX. This is where RAG, reasoning, and intelligent support happen.
 - **Web Console & CLI** — a human-friendly chat interface using pattern matching. Same tools, no AI required. Useful for quick tasks without an MCP client.
 
 ### Tool Routing Hierarchy
@@ -89,17 +89,18 @@ Reads from other modules' tables are fine. Writes to other modules go through BM
 - **Confirmation required** — all mutating operations return a dry-run preview unless `confirm: true` is passed.
 - **No user-supplied PHP, SQL, or shell** is ever executed.
 
-## Tool Catalog (218 tools)
+## Tool Catalog (220 tools)
 
-### Extensions (6)
+### Extensions (7)
 
 | Tool | Description |
 |------|-------------|
 | `fm_list_extensions` | List all extensions with optional tech/search filters |
 | `fm_get_extension` | Full details for a single extension |
 | `fm_get_extension_health` | Config + SIP registration + recent CDR |
-| `fm_add_extension` | Create a new PJSIP extension **[confirm]** |
+| `fm_add_extension` | Create a new PJSIP extension + linked User Manager user **[confirm]** |
 | `fm_update_extension` | Update extension name, secret, or CID **[confirm]** |
+| `fm_set_extension_email` | Set/update email on the linked User Manager user + voicemail-to-email **[confirm]** |
 | `fm_disable_extension` | Delete an extension **[confirm]** |
 
 ### Ring Groups (4)
@@ -318,6 +319,12 @@ Reads from other modules' tables are fine. Writes to other modules go through BM
 | `fm_system_update` | admin | Check for and apply system updates |
 | `fm_update_activation` | admin | Refresh system activation and license from Sangoma portal |
 
+### Sangoma Connect (1)
+
+| Tool | Level | Description |
+|------|-------|-------------|
+| `fm_sc_status` | read | SC preflight diagnostic — license, domain, cert, seats, next-step hints with clickable purchase/cert links |
+
 ### Notifications & Sounds (3)
 
 | Tool | Level | Description |
@@ -359,6 +366,38 @@ Reads from other modules' tables are fine. Writes to other modules go through BM
 | `fm_search` | read | Search across extensions, ring groups, queues, IVRs, trunks |
 | `fm_search_docs` | read | Search knowledge base — troubleshooting guides, how-to articles |
 | `fm_trace_call_flow` | read | Trace call flow path for a DID or extension — Mermaid.js diagram |
+
+## Chat Phrases (web console / CLI chat)
+
+The chat parser maps natural-language phrases to tools. A non-exhaustive sample:
+
+| Phrase | Routes to |
+|--------|-----------|
+| `add ext 1010 name "Jane"` | `fm_add_extension` |
+| `add ext 1010 name "Jane" email jane@x.com` | `fm_add_extension` (with email + userman user creation) |
+| `add ext 1010 name "Jane" with voicemail` | `fm_add_extension` then voicemail follow-up |
+| `set email 1010 jane@x.com` / `email 1010 jane@x.com` | `fm_set_extension_email` |
+| `enable voicemail 1010` / `disable voicemail 1010` | `fm_enable_voicemail` / `fm_disable_voicemail` |
+| `list extensions`, `list ring groups`, `list trunks` | corresponding `fm_list_*` |
+| `who's on the phone` / `live calls` | `fm_whos_on_the_phone` |
+| `status`, `dashboard`, `how's the pbx` | `fm_system_dashboard` |
+| `disk space`, `sys info` | corresponding read tools |
+| `stats`, `peak hours`, `failed calls`, `busiest extensions` | CDR analytics |
+| `sc status` / `sangoma connect status` / `check sc` | `fm_sc_status` |
+| `update activation` / `refresh license` | `fm_update_activation` |
+| `list certificates`, `update certificates` | `fm_list_certificates` / `fm_update_certificates` |
+| `list sangoma phones`, `diagnose sangoma 1005`, `reboot sangoma 1005` | DPMA phone tools |
+| `dpma alerts`, `dpma license` | DPMA diagnostics |
+| `trace flow 1010` / `where does 5551234 go` | `fm_trace_call_flow` |
+| `search jane` / `find queue 600` | `fm_search` |
+| `kb voicemail setup` / `how do i add a trunk` / `troubleshoot one-way audio` | `fm_search_docs` (knowledge base) |
+| Question ending in `?` | falls through to KB search |
+| `yes` / `no` | confirms or cancels a pending action / follow-up |
+| `skip` / `cancel` | aborts a free-text input prompt |
+
+Type `help` in the chat to see the full list.
+
+Follow-up chains: after `add extension`, the parser asks about voicemail; after voicemail enables, asks about email (with a clickable Skip and free-text input); after email, asks to apply changes. Click the `✅ Yes` / `❌ No` / `⏭ Skip` pills or just type the answer.
 
 ## Access Methods
 

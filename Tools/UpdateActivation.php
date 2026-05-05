@@ -4,53 +4,44 @@ require_once __DIR__ . '/AbstractTool.php';
 
 class UpdateActivation extends AbstractTool {
 	public function name() { return 'fm_update_activation'; }
-	public function description() { return 'Refresh system activation and license from Sangoma portal. Restarts Apache. Requires confirm:true.'; }
+	public function description() { return 'Refresh system activation and license from Sangoma portal — equivalent to clicking the Update Activation button on Sysadmin > Activation. Backgrounded because Apache restarts mid-call. Re-check `sc status` after ~15s. Requires confirm:true.'; }
 	public function validate($params) { return true; }
 	public function permissionLevel() { return self::PERM_ADMIN; }
 	public function execute($params, $context) {
 		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
 		if (!$confirm) {
-			return ['dry_run' => true, 'message' => "Would refresh activation license from Sangoma portal. This restarts Apache."];
+			return ['dry_run' => true, 'message' => "Would refresh activation license from Sangoma portal. Apache will restart (~15s). After it completes, re-check status."];
 		}
 
-		$output = [];
-		exec('script -qc "/usr/sbin/fwconsole sa update --no-ansi 2>&1" /dev/null', $output, $ec);
-		$raw = implode("\n", $output);
-
-		// Parse the license table if present (only shows on new/changed license)
-		$license = [];
-		foreach ($output as $line) {
-			if (preg_match('/\|\s*(.+?)\s*\|\s*(.+?)\s*\|/', $line, $m)) {
-				$key = trim($m[1]);
-				$val = trim($m[2]);
-				if ($key === 'Item' || preg_match('/^[\-\+]+$/', $key)) continue;
-				$license[$key] = $val;
-			}
+		$sa = $this->freepbx->Sysadmin;
+		$depid = $sa->getDeploymentName();
+		if (empty($depid)) {
+			return ['error' => 'No deployment ID found — system is not activated.'];
 		}
 
-		// Always supplement with BMO data
-		$activated = $this->freepbx->Sysadmin->isActivated();
-		$deployType = $this->freepbx->Sysadmin->getDeploymentType();
-		$deployName = $this->freepbx->Sysadmin->getDeploymentName();
+		if (!$this->canSudo()) {
+			return [
+				'needs_root' => true,
+				'message' => "This command requires root access.",
+			];
+		}
 
-		$support = [];
-		try {
-			$cl = $this->freepbx->Sysadmin->CommercialLicense();
-			$contractInfo = $cl->isSupportContractExpired();
-			if (is_array($contractInfo)) {
-				$support = $contractInfo;
-			}
-		} catch (\Exception $e) {}
-
-		$changed = strpos($raw, 'New Licence') !== false;
+		// `fwconsole sa activate <depid>` is the GUI-equivalent (full handshake +
+		// regen + apache restart). Apache restart kills the current request from
+		// the web chat, so background it. CLI invocations are unaffected either way.
+		$logFile = '/tmp/frogman-activation-' . time() . '.log';
+		$cmd = sprintf(
+			'nohup sudo /usr/sbin/fwconsole sa activate %s > %s 2>&1 < /dev/null &',
+			escapeshellarg($depid),
+			escapeshellarg($logFile)
+		);
+		shell_exec($cmd);
 
 		return [
-			'message' => $changed ? 'Activation refreshed — new license applied.' : 'Activation refreshed — license unchanged.',
-			'license' => $license,
-			'activated' => $activated,
-			'deployment_id' => $deployName,
-			'deployment_type' => $deployType,
-			'support_contract' => $support,
+			'message' => "Activation refresh started in the background. Apache will restart in ~10s; the new license takes effect once it returns. Re-check with `sc status` in ~15s.",
+			'deployment_id' => $depid,
+			'log_file' => $logFile,
+			'background' => true,
 		];
 	}
 }

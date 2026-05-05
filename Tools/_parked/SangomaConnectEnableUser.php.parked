@@ -1,0 +1,153 @@
+<?php
+// PARKED 2026-05-05 — see /Tools/_parked/README.md for why.
+// Preflight + dry-run logic verified working. The actual enableUserFromWizard
+// BMO call hits an AJAX-context wall. To revive: rename to .php, move back to
+// Tools/, and resolve the underlying BMO method situation (see memory doc
+// project_sc_onboarding_combo.md for the next-session paths).
+
+namespace FreePBX\modules\Frogman\Tools;
+require_once __DIR__ . '/../AbstractTool.php';
+
+class SangomaConnectEnableUser extends AbstractTool {
+	public function name() { return 'fm_sc_enable_user'; }
+	public function description() { return 'Enable Sangoma Connect for an extension (SCD + Talk Mobile). Looks up the linked User Manager user, calls enableUserFromWizard, optionally sends invite email. Run fm_sc_status first to verify SC is ready. Requires confirm:true.'; }
+	public function permissionLevel() { return self::PERM_WRITE; }
+
+	public function validate($params) {
+		if (empty($params['ext']) || !preg_match('/^\d+$/', (string)$params['ext'])) {
+			throw new \InvalidArgumentException('ext must be a numeric extension');
+		}
+		if (isset($params['mode']) && !in_array($params['mode'], ['scd','talk','both'], true)) {
+			throw new \InvalidArgumentException('mode must be scd, talk, or both');
+		}
+		return true;
+	}
+
+	public function execute($params, $context) {
+		if (!class_exists('\FreePBX') || !\FreePBX::Modules()->checkStatus('sangomaconnect')) {
+			return ['error' => 'Sangoma Connect module is not installed or enabled.'];
+		}
+		$ext = (string)$params['ext'];
+		$mode = $params['mode'] ?? 'both';
+		$invite = !array_key_exists('invite', $params) || $params['invite'] === true;
+		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
+
+		$sc = $this->freepbx->Sangomaconnect();
+
+		$licensed = (bool)$sc->licensed();
+		$expired  = (bool)$sc->isLicenseExpired();
+		$domainOk = (bool)$sc->getDomainStatus();
+		$seatCap  = (int)$sc->userLimit();
+
+		$scdList  = $this->extractExts($sc->desktopUserEnabledList() ?: []);
+		$talkList = $this->extractExts($sc->mobileUserEnabledList() ?: []);
+		$enabled  = array_unique(array_merge($scdList, $talkList));
+		$alreadyEnabled = in_array($ext, array_map('strval', $enabled), true);
+		$freeSeats = max(0, $seatCap - count($enabled));
+
+		$umUser = null;
+		try { $umUser = $this->freepbx->Userman->getUserByDefaultExtension($ext); } catch (\Throwable $e) {}
+		$umId = (is_array($umUser) && !empty($umUser['id'])) ? (int)$umUser['id'] : null;
+
+		$blockers = [];
+		if (!$licensed || $expired)        $blockers[] = 'License invalid or expired — try {{cmd:update activation|update activation}} first';
+		if (!$domainOk)                    $blockers[] = 'SC domain not running — bring up SC first or have an admin configure it via the GUI';
+		if (!$alreadyEnabled && $freeSeats <= 0) $blockers[] = "No free seats — {$seatCap} of {$seatCap} used";
+		if (!$umId)                        $blockers[] = "No User Manager user linked to extension {$ext}. Create one in User Management first.";
+
+		$preflight = [
+			'ext' => $ext,
+			'mode' => $mode,
+			'invite' => $invite,
+			'userman_id' => $umId,
+			'seat_cap' => $seatCap,
+			'enabled_count' => count($enabled),
+			'free_seats' => $freeSeats,
+			'already_enabled' => $alreadyEnabled,
+		];
+
+		if (!$confirm) {
+			$head = $alreadyEnabled
+				? "Ext {$ext} is already enabled in SC; re-running will refresh registration."
+				: "Would enable Sangoma Connect for ext {$ext} (mode: {$mode}).";
+			$lines = [$head];
+			if (!empty($blockers)) {
+				$lines[] = '';
+				$lines[] = '🔴 Blockers (will stop execution):';
+				foreach ($blockers as $b) $lines[] = '  • ' . $b;
+			}
+			$lines[] = '';
+			$lines[] = "Seats: " . count($enabled) . "/{$seatCap} used ({$freeSeats} free)";
+			if ($invite) $lines[] = "Invite email: will be sent to user " . ($umUser['email'] ?? '(no email on file)');
+			return [
+				'dry_run' => true,
+				'message' => implode("\n", $lines),
+				'blockers' => $blockers,
+				'preflight' => $preflight,
+			];
+		}
+
+		if (!empty($blockers)) {
+			return [
+				'success' => false,
+				'error' => 'Preflight failed — cannot proceed.',
+				'blockers' => $blockers,
+				'preflight' => $preflight,
+			];
+		}
+
+		$steps = [];
+		try {
+			$sc->enableUserFromWizard($ext, $umId, false);
+			$steps[] = ['step' => 'enableUserFromWizard', 'ok' => true];
+		} catch (\Throwable $e) {
+			$steps[] = ['step' => 'enableUserFromWizard', 'ok' => false, 'error' => $e->getMessage()];
+			return [
+				'success' => false,
+				'failed_at' => 'enableUserFromWizard',
+				'steps' => $steps,
+				'message' => "Enable failed at enableUserFromWizard: {$e->getMessage()}",
+			];
+		}
+
+		if ($invite) {
+			try {
+				$sc->inviteUser($umUser);
+				$steps[] = ['step' => 'inviteUser', 'ok' => true];
+			} catch (\Throwable $e) {
+				$steps[] = ['step' => 'inviteUser', 'ok' => false, 'error' => $e->getMessage()];
+			}
+		}
+
+		$scdAfter  = $this->extractExts($sc->desktopUserEnabledList() ?: []);
+		$talkAfter = $this->extractExts($sc->mobileUserEnabledList() ?: []);
+		$isScd  = in_array($ext, array_map('strval', $scdAfter), true);
+		$isTalk = in_array($ext, array_map('strval', $talkAfter), true);
+
+		$summary = "Ext {$ext}: SCD=" . ($isScd ? 'enabled' : 'no') . ", Talk=" . ($isTalk ? 'enabled' : 'no');
+		if ($invite) $summary .= ", invite sent";
+
+		return [
+			'success' => true,
+			'message' => $summary,
+			'ext' => $ext,
+			'userman_id' => $umId,
+			'scd_enabled' => $isScd,
+			'talk_enabled' => $isTalk,
+			'steps' => $steps,
+		];
+	}
+
+	private function extractExts($list) {
+		if (!is_array($list)) return [];
+		$out = [];
+		foreach ($list as $row) {
+			if (is_string($row) || is_numeric($row)) { $out[] = (string)$row; continue; }
+			if (is_array($row)) {
+				$ext = $row['extension'] ?? $row['ext'] ?? $row['userext'] ?? $row['user'] ?? $row['default_extension'] ?? null;
+				if ($ext !== null) $out[] = (string)$ext;
+			}
+		}
+		return $out;
+	}
+}

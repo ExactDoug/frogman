@@ -1,0 +1,155 @@
+<?php
+// PARKED 2026-05-05 — see /Tools/_parked/README.md.
+// This tool is probably not needed at all: SC handles its own domain
+// provisioning via Sangoma-issued <UUID>.connect.sangoma.com subdomains
+// during the GUI install. Frogman should never set the domain. Kept here
+// only as a record of the attempted bring-up sequence in case parts of
+// it become useful for some other automation (e.g. re-registration).
+
+namespace FreePBX\modules\Frogman\Tools;
+require_once __DIR__ . '/../AbstractTool.php';
+
+class SangomaConnectConfigureDomain extends AbstractTool {
+	public function name() { return 'fm_sc_configure_domain'; }
+	public function description() { return 'Bring up the Sangoma Connect domain — wires the default cert into SC, registers the deployment, and starts the service. Run fm_sc_status first to verify prereqs. Requires confirm:true to execute.'; }
+	public function permissionLevel() { return self::PERM_ADMIN; }
+
+	public function validate($params) {
+		if (isset($params['cert_id']) && !is_numeric($params['cert_id'])) {
+			throw new \InvalidArgumentException('cert_id must be numeric');
+		}
+		if (isset($params['domain']) && !preg_match('/^[a-zA-Z0-9.\-]+$/', $params['domain'])) {
+			throw new \InvalidArgumentException('domain must be a valid hostname');
+		}
+		return true;
+	}
+
+	public function execute($params, $context) {
+		if (!class_exists('\FreePBX') || !\FreePBX::Modules()->checkStatus('sangomaconnect')) {
+			return ['error' => 'Sangoma Connect module is not installed or enabled.'];
+		}
+		$sc = $this->freepbx->Sangomaconnect();
+		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
+
+		$licensed     = (bool)$sc->licensed();
+		$expired      = (bool)$sc->isLicenseExpired();
+		$cert         = $sc->getDefaultCert();
+		$hasCert      = is_array($cert) && !empty($cert);
+		$domainStatus = (bool)$sc->getDomainStatus();
+		$currentDomain = (string)($sc->getDomain() ?: '');
+
+		$certBasename = '';
+		if ($hasCert) {
+			$first = reset($cert);
+			$certBasename = is_array($first) ? ($first['basename'] ?? '') : '';
+		}
+		$domain = $params['domain'] ?? ($currentDomain ?: $certBasename);
+
+		$blockers = [];
+		if (!$licensed || $expired)  $blockers[] = 'License invalid or expired — try {{cmd:update activation|update activation}} first';
+		if (!$hasCert)               $blockers[] = 'No default TLS certificate. {{cmd:list certificates|See available certs}} or issue one in Certificate Manager (set as default).';
+		if (empty($domain))          $blockers[] = 'No domain available — pass `domain` param or set a default cert with a hostname';
+
+		$plan = [
+			"Config()->update(SANGOMACONNECTDOMAIN={$domain}, SANGOMACONNECTENABLED=1)",
+			'configureDomainCert(false)',
+			'setDeploymentCertificates(false)',
+			'registerDeployment()',
+			'serviceRegister(true)',
+			'startFreepbx()',
+			'poll getDomainStatus (up to 30s)',
+		];
+
+		$preflight = [
+			'licensed' => $licensed && !$expired,
+			'has_cert' => $hasCert,
+			'domain_already_running' => $domainStatus,
+			'current_domain' => $currentDomain,
+			'domain_to_use' => $domain,
+		];
+
+		if (!$confirm) {
+			$lines = [];
+			$lines[] = $domainStatus
+				? 'Would reconfigure SC domain (already running — this re-registers and restarts).'
+				: 'Would configure and start the Sangoma Connect domain.';
+			if (!empty($blockers)) {
+				$lines[] = '';
+				$lines[] = '🔴 Blockers (will stop execution):';
+				foreach ($blockers as $b) $lines[] = '  • ' . $b;
+			}
+			$lines[] = '';
+			$lines[] = 'Steps:';
+			foreach ($plan as $i => $p) $lines[] = '  ' . ($i + 1) . '. `' . $p . '`';
+			return [
+				'dry_run' => true,
+				'message' => implode("\n", $lines),
+				'blockers' => $blockers,
+				'plan' => $plan,
+				'preflight' => $preflight,
+			];
+		}
+
+		if (!empty($blockers)) {
+			return [
+				'dry_run' => false,
+				'error' => 'Preflight failed — cannot proceed.',
+				'blockers' => $blockers,
+				'preflight' => $preflight,
+			];
+		}
+
+		$steps = [];
+		$callOrFail = function($label, callable $fn) use (&$steps) {
+			try {
+				$fn();
+				$steps[] = ['step' => $label, 'ok' => true];
+				return true;
+			} catch (\Throwable $e) {
+				$steps[] = ['step' => $label, 'ok' => false, 'error' => $e->getMessage()];
+				return false;
+			}
+		};
+
+		// NOTE: this sequence is what we *tried*, not what works. The configureDomainCert
+		// call requires AJAX-context input we couldn't reproduce. The right approach is
+		// to let SC's own GUI install handle domain provisioning entirely.
+		if (!$callOrFail('updateAdvancedSettings',    function() use ($sc, $domain) { $sc->updateAdvancedSettings(['SANGOMACONNECTDOMAIN' => $domain, 'SANGOMACONNECTENABLED' => 1]); })) return $this->fail('updateAdvancedSettings', $steps, $preflight);
+		if (!$callOrFail('configureDomainCert',       function() use ($sc) { $sc->configureDomainCert(false); }))     return $this->fail('configureDomainCert',       $steps, $preflight);
+		if (!$callOrFail('setDeploymentCertificates', function() use ($sc) { $sc->setDeploymentCertificates(false); })) return $this->fail('setDeploymentCertificates', $steps, $preflight);
+		if (!$callOrFail('registerDeployment',        function() use ($sc) { $sc->registerDeployment(); }))            return $this->fail('registerDeployment',        $steps, $preflight);
+		if (!$callOrFail('serviceRegister',           function() use ($sc) { $sc->serviceRegister(true); }))           return $this->fail('serviceRegister',           $steps, $preflight);
+		if (!$callOrFail('startFreepbx',              function() use ($sc) { $sc->startFreepbx(); }))                   return $this->fail('startFreepbx',              $steps, $preflight);
+
+		$running = false;
+		$polled = 0;
+		for ($i = 1; $i <= 30; $i++) {
+			sleep(1);
+			$polled = $i;
+			if ($sc->getDomainStatus()) { $running = true; break; }
+		}
+
+		return [
+			'dry_run' => false,
+			'success' => $running,
+			'message' => $running
+				? "Sangoma Connect domain is up after {$polled}s."
+				: "Bring-up completed but getDomainStatus did not turn true within {$polled}s — check `sc status` and SC logs.",
+			'running' => $running,
+			'polled_seconds' => $polled,
+			'steps' => $steps,
+			'final_domain' => (string)($sc->getDomain() ?: ''),
+		];
+	}
+
+	private function fail($at, $steps, $preflight) {
+		return [
+			'dry_run' => false,
+			'success' => false,
+			'failed_at' => $at,
+			'steps' => $steps,
+			'preflight' => $preflight,
+			'message' => "Bring-up failed at {$at}. Run `sc status` and check SC logs.",
+		];
+	}
+}
