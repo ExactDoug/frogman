@@ -57,11 +57,12 @@ class AddInboundRoute extends AbstractTool {
 			'mohclass' => 'default', 'grppre' => '', 'delay_answer' => 0, 'pricid' => '',
 			'pmmaxretries' => '', 'pmminlength' => '', 'reversal' => '', 'rvolume' => '',
 		];
+		$descNote = !empty($params['description']) ? " — _{$params['description']}_" : '';
 		if (!$confirm) {
 			$cidNote = !empty($params['cidnum']) ? " (CID match: {$params['cidnum']})" : '';
-			return ['dry_run' => true, 'message' => "Would add inbound route: DID `{$params['extension']}`{$cidNote} → `{$dest}`. Reply yes to confirm.", 'route' => $incoming];
+			return ['dry_run' => true, 'message' => "Would add inbound route: DID `{$params['extension']}`{$cidNote} → `{$dest}`{$descNote}. Reply yes to confirm.", 'route' => $incoming];
 		}
 		\FreePBX::Core()->addDID($incoming);
-		return ['dry_run' => false, 'message' => "Inbound route added: DID `{$params['extension']}` → `{$dest}`", 'needs_reload' => true];
+		return ['dry_run' => false, 'message' => "Inbound route added: DID `{$params['extension']}` → `{$dest}`{$descNote}", 'needs_reload' => true];
 	}
 }

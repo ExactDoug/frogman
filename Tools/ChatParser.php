@@ -956,13 +956,15 @@ class ChatParser {
 			self::setPending($sessionId, 'fm_add_inbound_route', $params);
 			return ['tool' => 'fm_add_inbound_route', 'params' => $params];
 		}
-		// Wizard: bare "add inbound route" (or with DID pre-filled). Asks DID, destination, optional CID.
+		// Wizard: bare "add inbound route" (or with DID pre-filled). Asks DID, description,
+		// destination, optional CID match.
 		if (preg_match('/^(add|create)\s+(inbound\s+)?route(?:\s+(\S+))?$/i', $msg, $m)) {
 			$preset = !empty($m[3]) ? ['extension' => $m[3]] : [];
 			$prompts = [];
 			if (empty($preset['extension'])) {
 				$prompts[] = ['param' => 'extension', 'prompt' => "What's the inbound DID? (e.g. `5551234567` or `+15551234567`)"];
 			}
+			$prompts[] = ['param' => 'description', 'prompt' => "Description? Short label for the route (e.g. `Main line`, `Sales DID`), or {{cmd:skip|⏭ Skip}}.", 'skip_default' => null];
 			$prompts[] = ['param' => 'destination', 'prompt' => "Where should it route? Type an extension number (e.g. `1001`), `vm 1001`, `rg 600`, `ivr 1`, `tc 1`, or a full destination string."];
 			$prompts[] = ['param' => 'cidnum', 'prompt' => "Optional CID match — number to match in the caller ID, or {{cmd:skip|⏭ Skip (any caller)}}.", 'skip_default' => null];
 			self::setInputWizard($sessionId, 'fm_add_inbound_route', $preset, $prompts);
