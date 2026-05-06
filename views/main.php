@@ -20,6 +20,7 @@
 			<div class="oc-sidebar-body">
 				<div class="oc-guide-group">
 					<button class="oc-quick-btn oc-write-btn" data-cmd="add inbound route">add inbound route</button>
+					<button class="oc-quick-btn oc-write-btn" data-cmd="onboard new employee">onboard new employee</button>
 					<button class="oc-quick-btn oc-write-btn" data-cmd="set follow me">set follow me</button>
 				</div>
 			</div>

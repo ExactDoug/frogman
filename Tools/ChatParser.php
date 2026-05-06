@@ -117,16 +117,284 @@ class ChatParser {
 		}
 	}
 
+	// ── Macro engine ─────────────────────────────────────────────
+	// A macro chains multiple tools together with optional gates (yes/no branch
+	// points) and a final summary-preview step. Steps are walked one at a time;
+	// gates skip a block on "no". On final confirm, all qualifying actions fire
+	// in order with confirm:true and a single summary is returned.
+	//
+	// Step kinds:
+	//   prompt   — collect a param ($skip_default optional)
+	//   gate     — yes/no question; "no" advances by 1+skip_count, "yes" by 1
+	//   confirm  — summary preview of pending actions; "yes" runs them
+	//
+	// Action shape:
+	//   ['tool' => 'fm_x', 'params' => ['k' => '$param_name'], 'always' => true]
+	//   ['tool' => 'fm_x', 'params' => [...], 'if_set' => 'param_name']
+	//   'critical' => true on the foundational tool aborts the rest if it fails.
+
+	public static function setMacro($sessionId, $macroName) {
+		$macro = self::getMacroDef($macroName);
+		if (!$macro) return ['response' => "Unknown wizard: {$macroName}"];
+		$state = ['type' => 'macro', 'name' => $macroName, 'step_idx' => 0, 'params' => []];
+		self::saveMacroState($sessionId, $state);
+		return self::advanceMacro($sessionId, null);
+	}
+
+	private static function saveMacroState($sessionId, $state) {
+		$db = self::getDb();
+		$data = json_encode($state);
+		$sth = $db->prepare("SELECT id FROM oc_sessions WHERE id = ?");
+		$sth->execute([$sessionId]);
+		if ($sth->fetch()) {
+			$sth = $db->prepare("UPDATE oc_sessions SET context = ?, status = 'pending_input', last_activity = ? WHERE id = ?");
+			$sth->execute([$data, time(), $sessionId]);
+		} else {
+			$sth = $db->prepare("INSERT INTO oc_sessions (id, user_id, started_at, last_activity, context, status) VALUES (?, NULL, ?, ?, ?, 'pending_input')");
+			$sth->execute([$sessionId, time(), time(), $data]);
+		}
+	}
+
+	public static function advanceMacro($sessionId, $userInput) {
+		$db = self::getDb();
+		$sth = $db->prepare("SELECT context FROM oc_sessions WHERE id = ? AND status = 'pending_input'");
+		$sth->execute([$sessionId]);
+		$row = $sth->fetch(\PDO::FETCH_ASSOC);
+		if (!$row) return ['response' => 'Macro state lost.'];
+		$state = json_decode($row['context'], true);
+		if (($state['type'] ?? '') !== 'macro') return ['response' => 'Not in a macro flow.'];
+
+		$macro = self::getMacroDef($state['name']);
+		$steps = $macro['steps'];
+
+		// Apply user input to current step (if any)
+		if ($userInput !== null) {
+			if (preg_match('/^(cancel|abort|stop)$/i', $userInput)) {
+				self::clearPending($sessionId);
+				return ['response' => 'Cancelled.'];
+			}
+			$current = $steps[$state['step_idx']] ?? null;
+			if (!$current) {
+				self::clearPending($sessionId);
+				return ['response' => 'Macro ended unexpectedly.'];
+			}
+
+			if ($current['kind'] === 'prompt') {
+				if (preg_match('/^(no|skip|nevermind|nope)$/i', $userInput)) {
+					if (array_key_exists('skip_default', $current)) {
+						if ($current['skip_default'] !== null) {
+							$state['params'][$current['param']] = $current['skip_default'];
+						}
+					} else {
+						self::clearPending($sessionId);
+						return ['response' => 'OK, cancelled. (That step was required.)'];
+					}
+				} else {
+					$state['params'][$current['param']] = $userInput;
+				}
+				$state['step_idx']++;
+			} elseif ($current['kind'] === 'gate') {
+				if (preg_match('/^(yes|y|ok|sure|yep|yeah)$/i', $userInput)) {
+					$state['step_idx']++;
+				} else {
+					$state['step_idx'] += 1 + ($current['skip_count'] ?? 0);
+				}
+			} elseif ($current['kind'] === 'confirm') {
+				if (preg_match('/^(yes|y|ok|sure|yep|yeah)$/i', $userInput)) {
+					self::clearPending($sessionId);
+					return self::runMacroActions($state['params'], $macro, $sessionId);
+				}
+				self::clearPending($sessionId);
+				return ['response' => 'Cancelled — nothing changed.'];
+			}
+		}
+
+		// Walk steps until we hit one that needs user input (or run off the end)
+		while ($state['step_idx'] < count($steps)) {
+			$step = $steps[$state['step_idx']];
+			if ($step['kind'] === 'prompt' || $step['kind'] === 'gate') {
+				self::saveMacroState($sessionId, $state);
+				return ['response' => $step['prompt']];
+			}
+			if ($step['kind'] === 'confirm') {
+				self::saveMacroState($sessionId, $state);
+				return ['response' => self::renderMacroPreview($macro, $state['params'])];
+			}
+			$state['step_idx']++;
+		}
+
+		// Fell off the end without a confirm — run actions anyway
+		self::clearPending($sessionId);
+		return self::runMacroActions($state['params'], $macro, $sessionId);
+	}
+
+	private static function renderMacroPreview($macro, $params) {
+		$lines = ["**{$macro['title']}** — review and confirm:"];
+		foreach ($macro['actions'] as $action) {
+			if (empty($action['always']) && !empty($action['if_set']) && empty($params[$action['if_set']])) continue;
+			if (empty($action['always']) && empty($action['if_set'])) continue;
+			$desc = $action['preview'] ?? $action['tool'];
+			// Substitute $param tokens in the preview string
+			$desc = preg_replace_callback('/\$([a-z_]+)/', function($m) use ($params) {
+				return $params[$m[1]] ?? "({$m[1]} unset)";
+			}, $desc);
+			$lines[] = "  • {$desc}";
+		}
+		$lines[] = "\n{{cmd:yes|✅ Yes, do it all}} {{cmd:no|❌ Cancel}}";
+		return implode("\n", $lines);
+	}
+
+	private static function runMacroActions($params, $macro, $sessionId) {
+		$frogman = \FreePBX::Frogman();
+		$results = [];
+		foreach ($macro['actions'] as $action) {
+			$shouldRun = !empty($action['always']);
+			if (!$shouldRun && !empty($action['if_set'])) {
+				$shouldRun = !empty($params[$action['if_set']]);
+			}
+			if (!$shouldRun) continue;
+
+			$toolParams = [];
+			foreach (($action['params'] ?? []) as $k => $v) {
+				if (is_string($v) && substr($v, 0, 1) === '$') {
+					$key = substr($v, 1);
+					if (isset($params[$key]) && $params[$key] !== '') {
+						$toolParams[$k] = $params[$key];
+					}
+				} else {
+					$toolParams[$k] = $v;
+				}
+			}
+			$toolParams['confirm'] = true;
+
+			$result = $frogman->runTool($action['tool'], $toolParams, null, $sessionId);
+			$status = $result['status'] ?? 'error';
+			$results[] = [
+				'tool' => $action['tool'],
+				'status' => $status,
+				'message' => $result['message'] ?? ($result['data']['message'] ?? ''),
+				'data' => $result['data'] ?? null,
+			];
+			if ($status !== 'success' && !empty($action['critical'])) {
+				return ['response' => self::renderMacroResults($macro, $params, $results, true)];
+			}
+		}
+		return ['response' => self::renderMacroResults($macro, $params, $results, false)];
+	}
+
+	private static function renderMacroResults($macro, $params, $results, $aborted) {
+		$lines = $aborted
+			? ["**{$macro['title']} — aborted.** A required step failed; remaining steps were skipped."]
+			: ["**{$macro['title']} — done.**"];
+		$credentials = [];
+		foreach ($results as $r) {
+			$icon = $r['status'] === 'success' ? '✅' : '❌';
+			// Use only the first line of the tool's message — keeps each bullet to one line.
+			// The detailed messages get hoisted into a footer (credentials, etc.).
+			$msg = $r['message'] ?: $r['tool'];
+			$msg = preg_split('/\r?\n/', $msg, 2)[0];
+			$lines[] = "  {$icon} `{$r['tool']}` — {$msg}";
+			if ($r['tool'] === 'fm_add_extension' && !empty($r['data']['umpassword'])) {
+				$credentials[] = "UCP password for `{$params['ext']}`: `{$r['data']['umpassword']}` — save it now. Reset later in User Manager or via the UCP \"Forgot Password\" link.";
+			}
+		}
+		if (!empty($credentials)) {
+			$lines[] = "\n**🔑 Credentials**";
+			foreach ($credentials as $c) $lines[] = "  {$c}";
+		}
+		return implode("\n", $lines);
+	}
+
+	private static function getMacroDef($name) {
+		if ($name === 'onboard_employee') {
+			return [
+				'name' => 'onboard_employee',
+				'title' => 'Onboard new employee',
+				'steps' => [
+					['kind' => 'prompt', 'param' => 'ext', 'prompt' => 'Extension number for the new hire? (e.g. `1010`)'],
+					['kind' => 'prompt', 'param' => 'name', 'prompt' => 'Full name? (e.g. `Jane Smith`)'],
+					['kind' => 'prompt', 'param' => 'email', 'prompt' => 'Email address? (used for voicemail-to-email and UCP password reset, or {{cmd:skip|⏭ Skip}})', 'skip_default' => null],
+
+					// Follow Me: gate skips next 2 steps
+					['kind' => 'gate', 'prompt' => 'Set up Follow Me (ring desk + cell)? {{cmd:yes|✅ Yes}} {{cmd:no|⏭ Skip}}', 'skip_count' => 2],
+					['kind' => 'prompt', 'param' => 'fm_numbers', 'prompt' => 'Numbers to ring (comma-separated, include their extension first): e.g. `1010,5551234567`'],
+					['kind' => 'prompt', 'param' => 'fm_ringtime', 'prompt' => 'Ring time? {{cmd:15|15s}} {{cmd:20|20s}} {{cmd:30|30s}} {{cmd:45|45s}} {{cmd:60|60s}} {{cmd:skip|⏭ Default (20s)}}', 'skip_default' => null],
+
+					// Ring group: gate skips next 1
+					['kind' => 'gate', 'prompt' => 'Add to a ring group? {{cmd:yes|✅ Yes}} {{cmd:no|⏭ Skip}}', 'skip_count' => 1],
+					['kind' => 'prompt', 'param' => 'rg_id', 'prompt' => 'Which ring group ID? (e.g. `600`)'],
+
+					// Inbound DID: gate skips next 2
+					['kind' => 'gate', 'prompt' => 'Assign an inbound DID? {{cmd:yes|✅ Yes}} {{cmd:no|⏭ Skip}}', 'skip_count' => 2],
+					['kind' => 'prompt', 'param' => 'did_number', 'prompt' => 'DID to route to this extension?'],
+					['kind' => 'prompt', 'param' => 'did_description', 'prompt' => 'Description for the DID? Optional, or {{cmd:skip|⏭ Skip}}.', 'skip_default' => null],
+
+					// Outbound CID: gate skips next 1
+					['kind' => 'gate', 'prompt' => 'Set outbound caller ID? {{cmd:yes|✅ Yes}} {{cmd:no|⏭ Skip}}', 'skip_count' => 1],
+					['kind' => 'prompt', 'param' => 'out_cid', 'prompt' => 'Outbound caller ID number?'],
+
+					// Final preview / confirm
+					['kind' => 'confirm'],
+				],
+				'actions' => [
+					[
+						'tool' => 'fm_add_extension',
+						'params' => ['ext' => '$ext', 'name' => '$name', 'email' => '$email'],
+						'preview' => 'Create extension `$ext` ($name)',
+						'always' => true,
+						'critical' => true,
+					],
+					[
+						'tool' => 'fm_set_followme',
+						'params' => ['ext' => '$ext', 'numbers' => '$fm_numbers', 'ringtime' => '$fm_ringtime'],
+						'preview' => 'Follow Me on `$ext` → ring `$fm_numbers`',
+						'if_set' => 'fm_numbers',
+					],
+					[
+						'tool' => 'fm_ringgroup_add_member',
+						'params' => ['id' => '$rg_id', 'member' => '$ext'],
+						'preview' => 'Add `$ext` to ring group `$rg_id`',
+						'if_set' => 'rg_id',
+					],
+					[
+						'tool' => 'fm_add_inbound_route',
+						'params' => ['extension' => '$did_number', 'destination' => '$ext', 'description' => '$did_description'],
+						'preview' => 'Inbound route DID `$did_number` → `$ext`',
+						'if_set' => 'did_number',
+					],
+					[
+						'tool' => 'fm_set_caller_id',
+						'params' => ['ext' => '$ext', 'cid' => '$out_cid'],
+						'preview' => 'Outbound CID on `$ext` → `$out_cid`',
+						'if_set' => 'out_cid',
+					],
+					[
+						'tool' => 'fm_reload',
+						'params' => [],
+						'preview' => 'Apply config changes (reload)',
+						'always' => true,
+					],
+				],
+			];
+		}
+		return null;
+	}
+
 	public static function parse($message, $sessionId = 'default', $skipFuzzy = false) {
 		$msg = trim($message);
 		$lower = strtolower($msg);
 
-		// ── Free-text Input Prompt (e.g. "what email?") + Multi-step Wizard ──
+		// ── Free-text Input Prompt (e.g. "what email?") + Multi-step Wizard + Macro ──
 		// Must come BEFORE yes/no so a yes-as-value still works as input.
 		$inputPending = self::getInputPending($sessionId);
 		if ($inputPending) {
 			$isSkip = (bool)preg_match('/^(no|cancel|skip|nevermind|nope|abort)$/i', $msg);
 			$isWizard = ($inputPending['type'] ?? 'input') === 'wizard';
+			$isMacro = ($inputPending['type'] ?? 'input') === 'macro';
+
+			if ($isMacro) {
+				return self::advanceMacro($sessionId, $msg);
+			}
 
 			if ($isWizard) {
 				$prompts = $inputPending['prompts'] ?? [];
@@ -261,6 +529,12 @@ class ChatParser {
 		}
 		if (preg_match('/^(search|find|where\s+is|who\s+is)\s+(.+)$/i', $msg, $m)) {
 			return ['tool' => 'fm_search', 'params' => ['query' => trim($m[2])]];
+		}
+
+		// ── Onboard new employee (macro wizard) ──
+		// Has to come before generic create-extension patterns so it isn't shadowed.
+		if (preg_match('/^(onboard(\s+(new\s+)?(employee|hire|user|person))?|new\s+(employee|hire))$/i', $lower)) {
+			return self::setMacro($sessionId, 'onboard_employee');
 		}
 
 		// ── Extensions ──
@@ -1559,6 +1833,7 @@ class ChatParser {
   `list extensions` — show all
   `1001` — details for ext 1001
   `health 1001` — health check
+  `onboard new employee` — guided macro wizard (extension + voicemail + Follow Me + ring group + DID + outbound CID, all in one flow)
   `create extension 1002 for Jane Doe`
   `rename extension 1001 to Mike White`
   `delete extension 1002`
