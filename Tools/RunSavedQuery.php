@@ -49,18 +49,37 @@ class RunSavedQuery extends AbstractTool {
 			$variables = $decoded ?? [];
 		}
 
-		// Get API credentials from database — look for our app or any app with gql scope
-		$sth = $db->prepare("SELECT client_id, client_secret FROM api_applications WHERE allowed_scopes LIKE '%gql%' LIMIT 1");
-		$sth->execute();
-		$app = $sth->fetch(\PDO::FETCH_ASSOC);
+		// Get API credentials. Stored client_secrets are hashed at rest, so we can't reuse arbitrary
+		// existing apps — we cache Frogman's own auto-created app credentials in our module KVStore.
+		$cached = $this->freepbx->Frogman->getConfig('api_app_credentials');
+		$app = !empty($cached) ? json_decode($cached, true) : null;
+
+		// Validate the cached app still exists in api_applications
+		if (!empty($app['client_id'])) {
+			$check = $db->prepare("SELECT 1 FROM api_applications WHERE client_id = ? LIMIT 1");
+			$check->execute([$app['client_id']]);
+			if (!$check->fetch()) {
+				$app = null;
+			}
+		}
 
 		if (empty($app)) {
-			// Auto-create an API app for Frogman
-			$clientId = 'frogman-' . bin2hex(random_bytes(8));
-			$clientSecret = bin2hex(random_bytes(16));
-			$sth = $db->prepare("INSERT INTO api_applications (name, description, grant_type, client_id, client_secret, allowed_scopes) VALUES (?, ?, ?, ?, ?, ?)");
-			$sth->execute(['Frogman', 'Auto-created by Frogman for GraphQL queries', 'client_credentials', $clientId, $clientSecret, 'gql']);
-			$app = ['client_id' => $clientId, 'client_secret' => $clientSecret];
+			$users = $this->freepbx->Userman->getAllUsers();
+			if (empty($users)) {
+				throw new \Exception("Cannot create API app: no User Manager users exist");
+			}
+			$ownerId = (int)$users[0]['id'];
+			$created = $this->freepbx->Api->applications->add(
+				$ownerId,
+				'client_credentials',
+				'Frogman',
+				'Auto-created by Frogman for GraphQL queries',
+				null,
+				null,
+				'gql'
+			);
+			$app = ['client_id' => $created['client_id'], 'client_secret' => $created['client_secret']];
+			$this->freepbx->Frogman->setConfig('api_app_credentials', json_encode($app));
 		}
 
 		// Get a token

@@ -19,11 +19,7 @@ class DeleteTimecondition extends AbstractTool {
 		if (!$confirm) {
 			return ['dry_run' => true, 'message' => "Would delete time condition \"{$name}\" (ID: {$id}). Reply yes to confirm."];
 		}
-		$db = $this->freepbx->Database;
-		$db->prepare("DELETE FROM timeconditions WHERE timeconditions_id = ?")->execute([$id]);
-		// Clean up feature code
-		$fcc = new \featurecode('timeconditions', 'toggle-mode-' . $id);
-		$fcc->delete();
+		$this->freepbx->Timeconditions->delTimeCondition($id);
 		return ['dry_run' => false, 'message' => "Time condition \"{$name}\" (ID: {$id}) deleted", 'needs_reload' => true];
 	}
 }

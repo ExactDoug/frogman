@@ -26,9 +26,13 @@ class SetCallerId extends AbstractTool {
 			return ['dry_run' => true, 'message' => "Would {$action} on extension {$ext} ({$user['name']}). Current: {$from}."];
 		}
 
-		$db = $this->freepbx->Database;
-		$sth = $db->prepare("UPDATE users SET outboundcid = ? WHERE extension = ?");
-		$sth->execute([$cid, $ext]);
+		// Round-trip through Core BMO so both the users table and astdb stay in sync.
+		// Asterisk reads outboundcid from astdb at call time; writing only the MySQL row has no runtime effect.
+		$settings = $user;
+		$settings['extension'] = $ext;
+		$settings['outboundcid'] = $cid;
+		$this->freepbx->Core->delUser($ext, true);
+		$this->freepbx->Core->addUser($ext, $settings, true);
 
 		$label = empty($cid) ? 'cleared' : "set to {$cid}";
 		return ['dry_run' => false, 'message' => "Outbound CID {$label} on extension {$ext} ({$user['name']}).", 'needs_reload' => true];

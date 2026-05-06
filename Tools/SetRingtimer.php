@@ -20,16 +20,20 @@ class SetRingtimer extends AbstractTool {
 		$user = $this->freepbx->Core->getUser($ext);
 		if (empty($user)) throw new \Exception("Extension {$ext} not found");
 
-		$current = $user['ringtimer'] ?? 0;
+		$current = (int)($user['ringtimer'] ?? 0);
 		if (!$confirm) {
 			$label = $seconds == 0 ? 'default (unlimited)' : "{$seconds}s";
 			$curLabel = $current == 0 ? 'default' : "{$current}s";
 			return ['dry_run' => true, 'message' => "Would set ring timeout to {$label} on extension {$ext} ({$user['name']}). Current: {$curLabel}."];
 		}
 
-		$db = $this->freepbx->Database;
-		$sth = $db->prepare("UPDATE users SET ringtimer = ? WHERE extension = ?");
-		$sth->execute([$seconds, $ext]);
+		// Round-trip through Core BMO so both the users table and astdb stay in sync.
+		// Asterisk reads ringtimer from astdb at call time; writing only the MySQL row has no runtime effect.
+		$settings = $user;
+		$settings['extension'] = $ext;
+		$settings['ringtimer'] = $seconds;
+		$this->freepbx->Core->delUser($ext, true);
+		$this->freepbx->Core->addUser($ext, $settings, true);
 
 		$label = $seconds == 0 ? 'default' : "{$seconds}s";
 		return ['dry_run' => false, 'message' => "Ring timeout set to {$label} on extension {$ext} ({$user['name']}).", 'needs_reload' => true];

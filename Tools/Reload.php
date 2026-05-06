@@ -26,8 +26,7 @@ class Reload extends AbstractTool {
 			return ['dry_run' => true, 'message' => "There are {$activeCalls} active call(s). Would reload config — this may briefly disrupt calls.", 'active_calls' => $activeCalls];
 		}
 		$res = do_reload();
-		// Clear the "Apply Config" bar — same as FreePBX's own reload handler
-		$this->freepbx->Database->query("UPDATE admin SET value = 'false' WHERE variable = 'need_reload'");
+		// fwconsole reload (called by do_reload) clears need_reload itself on success — no manual UPDATE needed.
 		return ['dry_run' => false, 'message' => 'Configuration reload completed.', 'active_calls_at_reload' => $activeCalls, 'result' => $res];
 	}
 }

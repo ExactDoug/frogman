@@ -53,7 +53,7 @@ Decision rule: ask "does this work for a Yealink phone too?" If no → vendor na
 
 ```bash
 # Sync files to server
-rsync -avz ./ root@YOUR_HOST:/var/www/html/admin/modules/frogman/
+rsync -avz --exclude='._*' --exclude='.DS_Store' ./ root@YOUR_HOST:/var/www/html/admin/modules/frogman/
 
 # On server:
 fwconsole chown
