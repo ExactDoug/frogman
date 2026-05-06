@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Frogman v1.2.1 — QA Checklist</title>
+<style>
+:root {
+  --bg: #f4f6f7;
+  --panel: #fff;
+  --ink: #1a2e2d;
+  --muted: #6b7c7b;
+  --primary: #0f5a59;
+  --accent: #009d9d;
+  --pass: #2e7d32;
+  --fail: #c62828;
+  --skip: #ff8f00;
+  --border: #d6dedc;
+  --code-bg: #1a2e2d;
+  --code-ink: #b8e6e4;
+  --tier-a: #c62828;
+  --tier-b: #e65100;
+  --tier-c: #2e7d32;
+  --tier-d: #1565c0;
+  --tier-e: #6a1b9a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; }
+header { background: var(--primary); color: #fff; padding: 16px 24px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+header h1 { margin: 0 0 4px 0; font-size: 22px; }
+header .sub { font-size: 13px; opacity: 0.85; }
+.toolbar { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+.toolbar input[type=search] { flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: #fff; border-radius: 4px; font-size: 14px; }
+.toolbar input[type=search]::placeholder { color: rgba(255,255,255,0.6); }
+.toolbar button { padding: 8px 14px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: #fff; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; }
+.toolbar button:hover { background: rgba(255,255,255,0.2); }
+.progress-meter { display: flex; gap: 16px; align-items: center; font-size: 13px; }
+.progress-bar { width: 200px; height: 8px; background: rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+.layout { display: grid; grid-template-columns: 240px 1fr; gap: 24px; padding: 24px; max-width: 1400px; margin: 0 auto; }
+nav.toc { position: sticky; top: 160px; align-self: start; max-height: calc(100vh - 180px); overflow-y: auto; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+nav.toc h3 { margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px; }
+nav.toc ul { list-style: none; padding: 0; margin: 0 0 12px 0; }
+nav.toc li { margin: 0; }
+nav.toc a { display: block; padding: 4px 6px; color: var(--ink); text-decoration: none; border-radius: 3px; font-size: 13px; }
+nav.toc a:hover { background: var(--bg); }
+nav.toc .tier-label { font-size: 10px; padding: 1px 5px; border-radius: 2px; color: #fff; margin-right: 6px; font-weight: 600; }
+nav.toc .tier-A { background: var(--tier-a); }
+nav.toc .tier-B { background: var(--tier-b); }
+nav.toc .tier-C { background: var(--tier-c); }
+nav.toc .tier-D { background: var(--tier-d); }
+nav.toc .tier-E { background: var(--tier-e); }
+main { display: flex; flex-direction: column; gap: 16px; }
+.section { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.section h2 { margin: 0; padding: 14px 18px; font-size: 16px; background: linear-gradient(90deg, var(--primary), var(--accent)); color: #fff; display: flex; justify-content: space-between; align-items: center; }
+.section h2 .tier-badge { font-size: 11px; padding: 2px 8px; border-radius: 3px; background: rgba(0,0,0,0.25); font-weight: 600; }
+.section .section-blurb { padding: 8px 18px 0 18px; font-size: 13px; color: var(--muted); }
+.commands { padding: 8px 18px 14px 18px; }
+.cmd { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--border); align-items: start; }
+.cmd:last-child { border-bottom: none; }
+.cmd-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cmd-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cmd-code { background: var(--code-bg); color: var(--code-ink); padding: 4px 10px; border-radius: 3px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; word-break: break-all; }
+.cmd-copy { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 3px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; }
+.cmd-copy:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.cmd-copy.copied { background: var(--pass); color: #fff; border-color: var(--pass); }
+.cmd-expect { font-size: 12px; color: var(--muted); }
+.cmd-status { display: flex; gap: 4px; align-items: center; }
+.status-btn { padding: 4px 10px; border: 1px solid var(--border); background: var(--panel); border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--muted); }
+.status-btn[data-state=pass].active { background: var(--pass); color: #fff; border-color: var(--pass); }
+.status-btn[data-state=fail].active { background: var(--fail); color: #fff; border-color: var(--fail); }
+.status-btn[data-state=skip].active { background: var(--skip); color: #fff; border-color: var(--skip); }
+.cmd.passed { background: rgba(46,125,50,0.06); }
+.cmd.failed { background: rgba(198,40,40,0.06); }
+.cmd.skipped { opacity: 0.55; }
+.notes { width: 100%; min-height: 28px; margin-top: 4px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 3px; font-size: 12px; resize: vertical; font-family: inherit; display: none; }
+.cmd.failed .notes, .cmd.has-notes .notes { display: block; }
+.hidden { display: none !important; }
+@media print {
+  header { position: static; }
+  nav.toc { display: none; }
+  .layout { grid-template-columns: 1fr; padding: 0; }
+  .toolbar, .cmd-copy { display: none; }
+  .section { break-inside: avoid; page-break-inside: avoid; box-shadow: none; }
+  body { background: #fff; }
+}
+@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } nav.toc { position: static; max-height: none; } }
+.legend { display: flex; gap: 12px; padding: 8px 18px; background: var(--bg); font-size: 12px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+.legend strong { color: var(--ink); }
+.legend .pill { padding: 2px 8px; border-radius: 10px; font-weight: 600; color: #fff; font-size: 11px; }
+.legend .pill.A { background: var(--tier-a); }
+.legend .pill.B { background: var(--tier-b); }
+.legend .pill.C { background: var(--tier-c); }
+.legend .pill.D { background: var(--tier-d); }
+.legend .pill.E { background: var(--tier-e); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Frogman v1.2.1 — QA Checklist</h1>
+  <div class="sub">220 tools · Comprehensive chat-command coverage · State persists in localStorage</div>
+  <div class="toolbar">
+    <input type="search" id="filter" placeholder="Filter commands or sections (e.g. 'sangoma', 'extension', 'forward')…">
+    <div class="progress-meter"><span id="progress-text">0 / 0</span><div class="progress-bar"><div class="progress-bar-fill" id="progress-fill" style="width:0%"></div></div></div>
+    <button id="export-btn">Export Results</button>
+    <button id="reset-btn">Reset All</button>
+  </div>
+</header>
+
+<div class="legend">
+  <strong>Tiers:</strong>
+  <span class="pill A">A</span> Recently shipped (v1.2.x — test first)
+  <span class="pill B">B</span> Writes (touch state)
+  <span class="pill C">C</span> Reads (smoke)
+  <span class="pill D">D</span> Diagnostics
+  <span class="pill E">E</span> Admin / infra
+</div>
+
+<div class="layout">
+
+<nav class="toc" id="toc">
+  <h3>Sections</h3>
+  <!-- generated -->
+</nav>
+
+<main id="main">
+  <!-- generated -->
+</main>
+
+</div>
+
+<script>
+// ─── data ─────────────────────────────────────────────────────────────────
+// Each section: { id, title, tier, blurb, commands: [{ cmd, expect, write }] }
+// "write" flag adds a confirm-required note. "tier" colors the section badge.
+
+const SECTIONS = [
+  {
+    id: 'sangoma-dpma', title: 'Sangoma / DPMA Phones', tier: 'A',
+    blurb: 'v1.2.0 brand-scoped Sangoma tools. All BMO-first + AMI for runtime state.',
+    commands: [
+      { cmd: 'list sangoma phones', expect: 'JSON list of every Sangoma phone DPMA knows about (count + array of {identifier, ext, line}).' },
+      { cmd: 'sangoma phone 101', expect: 'Full DPMA detail for phone 101-1 (model, firmware, MAC, etc.) + EPM mapping + live SIP registration cross-reference.' },
+      { cmd: 'sangoma phone 1005', expect: 'Same as above for ext 1005.' },
+      { cmd: 'diagnose sangoma 101', expect: 'Composite — mapping/license/registration/DPMA state/firmware audit/alerts/qualify, with summary verdict line. Dev box has no EPM mapping for 101 → "no EPM mapping" early exit.' },
+      { cmd: 'diagnose sangoma phone 101', expect: 'Same as above (alternate phrasing).' },
+      { cmd: 'sangoma diagnose 101', expect: 'Same as above.' },
+      { cmd: 'sangoma check 101', expect: 'Same as above.' },
+      { cmd: 'dpma alerts', expect: 'All active DPMA alerts — count + list. Dev box should report 0.' },
+      { cmd: 'sangoma alerts', expect: 'Same as above.' },
+      { cmd: 'sangoma alerts 101', expect: 'Alerts filtered to extension 101 only.' },
+      { cmd: 'dpma license', expect: 'DPMA license validity + EPM-licensed cross-ref. Dev box should report valid.' },
+      { cmd: 'sangoma license', expect: 'Same.' },
+      { cmd: 'reboot sangoma 101', expect: 'Dry-run preview — should refuse with "no EPM mapping" since 101 has no EPM record.', write: true },
+    ]
+  },
+  {
+    id: 'sangoma-connect', title: 'Sangoma Connect', tier: 'A',
+    blurb: 'v1.2.1 SC preflight + activation handshake.',
+    commands: [
+      { cmd: 'sc status', expect: 'SC preflight diagnostic — license, domain, cert, seat count, next-step hint with clickable purchase/cert links.' },
+      { cmd: 'sangoma connect status', expect: 'Same as above.' },
+      { cmd: 'check sc', expect: 'Same.' },
+      { cmd: 'show sc status', expect: 'Same.' },
+      { cmd: 'sc preflight', expect: 'Same.' },
+      { cmd: 'show license', expect: 'License info dump — deployment ID, status, products, expiry.' },
+      { cmd: 'show activation', expect: 'Same as show license.' },
+      { cmd: 'update activation', expect: 'Dry-run preview, then on confirm: full GUI-equivalent activation handshake via fwconsole sa activate <depid>, backgrounded.', write: true },
+      { cmd: 'refresh license', expect: 'Same as update activation.', write: true },
+    ]
+  },
+  {
+    id: 'email-onboarding', title: 'Email & Onboarding Chain', tier: 'A',
+    blurb: 'v1.2.1 dual-layer email update + extension creation that always links a User Manager user.',
+    commands: [
+      { cmd: 'set email 1099 alice@example.com', expect: 'Updates User Manager email + voicemail-to-email via Voicemail::updateMailbox.', write: true },
+      { cmd: 'email 1099 alice@example.com', expect: 'Alternate phrasing for set email.', write: true },
+      { cmd: 'set extension email 1099 alice@example.com', expect: 'Same.', write: true },
+      { cmd: 'create extension 1100 for Test User', expect: 'Dry-run preview, then creates ext 1100 + linked userman_users row. Reply yes to confirm.', write: true },
+      { cmd: 'add ext 1100 name Foo email a@b.com', expect: 'Dry-run preview with email param. Confirm flow includes email assignment.', write: true },
+      { cmd: 'create extension 1101 for Bob with voicemail', expect: 'Combo flow — creates ext + enables voicemail, then prompts "Add email?" with clickable Skip.', write: true },
+      { cmd: 'create extension 1102 for Carol email c@example.com', expect: 'Single-shot extension+email creation, no follow-up prompt needed.', write: true },
+    ]
+  },
+  {
+    id: 'dashboard-status', title: 'Dashboard, Status & Connection Guide', tier: 'A',
+    blurb: 'Dashboard registered-count fix is post-1.2.1; verify current behavior.',
+    commands: [
+      { cmd: 'status', expect: 'System dashboard — calls, registered count (from pjsip show contacts), trunks, notifications, uptime.' },
+      { cmd: 'dashboard', expect: 'Same.' },
+      { cmd: 'overview', expect: 'Same.' },
+      { cmd: "how's my pbx", expect: 'Same.' },
+      { cmd: 'connect', expect: 'MCP connection guide — config snippets for Claude Desktop, etc.' },
+      { cmd: 'mcp config', expect: 'Same.' },
+      { cmd: 'how to connect', expect: 'Same.' },
+      { cmd: 'help', expect: 'Multi-section help text covering every command category.' },
+      { cmd: 'commands', expect: 'Same as help.' },
+    ]
+  },
+  {
+    id: 'extensions-write', title: 'Extensions — Create / Update / Delete', tier: 'B',
+    blurb: 'Write paths through fm_add_extension / fm_update_extension / fm_disable_extension. Always dry-run first.',
+    commands: [
+      { cmd: 'create extension 1200 for Jane Doe', expect: 'Dry-run preview, confirm to create.', write: true },
+      { cmd: 'add ext 1201 named John Smith', expect: 'Dry-run preview.', write: true },
+      { cmd: 'new extension 1202', expect: 'Dry-run preview, no name set.', write: true },
+      { cmd: 'create ext 1203 for Test User and forward to 1001', expect: 'Combo: extension + call forward configured at creation.', write: true },
+      { cmd: 'create ext 1204 for QA User add to ringgroup 600', expect: 'Combo: extension + ring group membership.', write: true },
+      { cmd: 'create ext 1205 for VM Test with voicemail', expect: 'Combo: extension + voicemail enable, then "Add email?" prompt.', write: true },
+      { cmd: 'rename extension 1200 to Jane White', expect: 'Updates display name.', write: true },
+      { cmd: 'update ext 1200 name Janet Doe', expect: 'Same.', write: true },
+      { cmd: 'change extension 1200 to Janet White', expect: 'Same.', write: true },
+      { cmd: 'delete extension 1200', expect: 'Dry-run preview, confirm to disable.', write: true },
+      { cmd: 'remove ext 1201', expect: 'Same.', write: true },
+      { cmd: 'disable extension 1202', expect: 'Same.', write: true },
+    ]
+  },
+  {
+    id: 'extension-features', title: 'Per-Extension Features (DND / Forward / FollowMe / CID / Recording)', tier: 'B',
+    commands: [
+      { cmd: 'enable dnd on 1001', expect: 'Sets DND for ext 1001.', write: true },
+      { cmd: 'disable dnd on 1001', expect: 'Clears DND.', write: true },
+      { cmd: 'toggle dnd on 1001', expect: 'Toggles DND.', write: true },
+      { cmd: 'show dnd on 1001', expect: 'Current DND state.' },
+      { cmd: 'forward 1001 to 5551234567', expect: 'Sets call forward.', write: true },
+      { cmd: 'set callforward on 1001 to 5551234567', expect: 'Same.', write: true },
+      { cmd: 'show forward on 1001', expect: 'Current call-forward target.' },
+      { cmd: 'clear forward on 1001', expect: 'Clears call forward.', write: true },
+      { cmd: 'set followme on 1001 to 1001,5551234567', expect: 'Configures Follow-Me destinations.', write: true },
+      { cmd: 'clear followme on 1001', expect: 'Clears Follow-Me.', write: true },
+      { cmd: 'set caller id on 1001 to 5559998888', expect: 'Sets outbound CID for ext.', write: true },
+      { cmd: 'clear caller id on 1001', expect: 'Clears outbound CID.', write: true },
+      { cmd: 'enable recording on 1001', expect: 'Sets call recording on extension.', write: true },
+      { cmd: 'enable recording on 1001 to always', expect: 'Force-record mode.', write: true },
+      { cmd: 'disable recording on 1001', expect: 'Disables recording.', write: true },
+      { cmd: 'set ring time on 1001 to 30s', expect: 'Sets ring timer.', write: true },
+      { cmd: 'enable voicemail on 1001', expect: 'Enables voicemail; should prompt "Add email?" follow-up.', write: true },
+      { cmd: 'disable voicemail on 1001', expect: 'Disables voicemail.', write: true },
+    ]
+  },
+  {
+    id: 'ringgroups-write', title: 'Ring Groups — Create / Members', tier: 'B',
+    commands: [
+      { cmd: 'create ringgroup 700 with 1001,1002,1003', expect: 'Creates RG 700 with three members.', write: true },
+      { cmd: 'create ring group 701 members 1001,1002 strategy hunt', expect: 'Creates RG with hunt strategy.', write: true },
+      { cmd: 'add 1001 to ringgroup 600', expect: 'Adds member.', write: true },
+      { cmd: 'remove 1001 from ringgroup 600', expect: 'Removes member.', write: true },
+      { cmd: 'delete ringgroup 700', expect: 'Deletes RG.', write: true },
+    ]
+  },
+  {
+    id: 'inbound-routes-write', title: 'Inbound Routes — Add / Remove', tier: 'B',
+    commands: [
+      { cmd: 'add inbound route 5551234567 to 1001', expect: 'Adds DID → ext route.', write: true },
+      { cmd: 'create inbound route 5551234567 to 1001', expect: 'Same.', write: true },
+      { cmd: 'remove inbound route 5551234567', expect: 'Removes the route.', write: true },
+      { cmd: 'delete inbound route 5551234567', expect: 'Same.', write: true },
+      { cmd: 'create inbound route', expect: 'No args — should return clickable syntax-prompt example.' },
+      { cmd: 'delete inbound route', expect: 'Same — clickable example.' },
+    ]
+  },
+  {
+    id: 'blacklist-allowlist', title: 'Blacklist & Allowlist', tier: 'B',
+    commands: [
+      { cmd: 'block 5551234567', expect: 'Adds number to blacklist.', write: true },
+      { cmd: 'blacklist 5551234567', expect: 'Same.', write: true },
+      { cmd: 'unblock 5551234567', expect: 'Removes from blacklist.', write: true },
+      { cmd: 'allow 1.2.3.4', expect: 'Adds to allowlist.', write: true },
+      { cmd: 'whitelist 192.168.1.0/24', expect: 'CIDR allowlist add.', write: true },
+      { cmd: 'unallow 1.2.3.4', expect: 'Removes from allowlist.', write: true },
+    ]
+  },
+  {
+    id: 'api-tokens', title: 'API Tokens', tier: 'B',
+    commands: [
+      { cmd: 'create token for jane', expect: 'Dry-run, then creates read-level token.', write: true },
+      { cmd: 'create api token for jane as write', expect: 'Write-level token.', write: true },
+      { cmd: 'generate token for bob with admin', expect: 'Admin-level token.', write: true },
+      { cmd: 'list tokens', expect: 'All API tokens with username + level + active state.' },
+      { cmd: 'list api tokens', expect: 'Same.' },
+      { cmd: 'revoke token 5', expect: 'Sets active=0 but retains row.', write: true },
+      { cmd: 'delete token 5', expect: 'Hard delete.', write: true },
+    ]
+  },
+  {
+    id: 'admins-permissions', title: 'Admin Users & Permissions', tier: 'B',
+    commands: [
+      { cmd: 'create admin testadmin', expect: 'Creates admin user (you set password later via reset).', write: true },
+      { cmd: 'create admin jane named Jane Doe', expect: 'Same with display name.', write: true },
+      { cmd: 'reset password for testadmin', expect: 'Triggers password reset flow.', write: true },
+      { cmd: 'list permissions', expect: 'Every user with their Frogman permission level.' },
+      { cmd: 'set permission jane to write', expect: 'Sets permission level.', write: true },
+      { cmd: 'set permission jane to admin', expect: 'Elevates to admin.', write: true },
+      { cmd: 'set permission jane to read', expect: 'Demotes to read-only.', write: true },
+    ]
+  },
+  {
+    id: 'misc-destinations', title: 'Misc Destinations', tier: 'B',
+    commands: [
+      { cmd: 'list destinations', expect: 'All misc destinations.' },
+      { cmd: 'add destination "After Hours" to voicemail 1001', expect: 'Creates a misc dest pointing at vm 1001.', write: true },
+      { cmd: 'create destination "Reception" dial 600', expect: 'Generic dial-string dest.', write: true },
+      { cmd: 'remove destination 1', expect: 'Deletes by ID.', write: true },
+    ]
+  },
+  {
+    id: 'dialplan-builder', title: 'Dialplan Builder', tier: 'B',
+    commands: [
+      { cmd: 'create menu on 8000 press 1 for 600 press 2 for 601', expect: 'Builds an IVR menu via custom context.', write: true },
+      { cmd: 'create time route for 1001 business hours to 600 after hours to voicemail', expect: 'Time-based route.', write: true },
+      { cmd: 'send webhook to https://example.com/hook after every call', expect: 'Wires a CDR-end webhook.', write: true },
+      { cmd: 'route calls from 212 to 700', expect: 'Area-code-based inbound rule.', write: true },
+      { cmd: 'create failover 1001 1002 1003 then voicemail', expect: 'Failover chain.', write: true },
+      { cmd: 'create feature code *99 that reads back my extension', expect: 'Custom feature code.', write: true },
+      { cmd: 'remove context oc-ivr-8000', expect: 'Removes a custom context.', write: true },
+      { cmd: 'show dialplan', expect: 'Current custom dialplan contexts.' },
+      { cmd: 'show context oc-ivr-8000', expect: 'Single context detail.' },
+      { cmd: 'show templates', expect: 'Available dialplan templates.' },
+    ]
+  },
+  {
+    id: 'live-call-control', title: 'Live Call Control', tier: 'B',
+    blurb: 'Mid-call AMI actions — needs an active channel to test.',
+    commands: [
+      { cmd: 'call 1001 to 5551234567', expect: 'Click-to-call — originates a call from 1001 to the destination.', write: true },
+      { cmd: 'hangup PJSIP/1001-00000001', expect: 'Hangs up the channel.', write: true },
+      { cmd: 'transfer PJSIP/1001-00000001 to 1002', expect: 'Blind transfers.', write: true },
+      { cmd: 'park PJSIP/1001-00000001', expect: 'Parks the channel.', write: true },
+      { cmd: 'record PJSIP/1001-00000001', expect: 'Starts MixMonitor.', write: true },
+      { cmd: 'stop recording PJSIP/1001-00000001', expect: 'Stops MixMonitor.', write: true },
+      { cmd: 'mute PJSIP/1001-00000001', expect: 'Mutes channel.', write: true },
+      { cmd: 'unmute PJSIP/1001-00000001', expect: 'Unmutes.', write: true },
+    ]
+  },
+  {
+    id: 'queue-agents', title: 'Queue Agents', tier: 'B',
+    commands: [
+      { cmd: 'add 1001 to queue 400', expect: 'Adds agent to queue.', write: true },
+      { cmd: 'remove 1001 from queue 400', expect: 'Removes agent.', write: true },
+      { cmd: 'pause 1001 in queue 400', expect: 'Pauses agent.', write: true },
+      { cmd: 'unpause 1001 in queue 400', expect: 'Unpauses.', write: true },
+      { cmd: 'queue status', expect: 'All queue stats — calls waiting, agents available, etc.' },
+      { cmd: 'queue status 400', expect: 'Single queue status.' },
+    ]
+  },
+  {
+    id: 'conference-control', title: 'Conference Control', tier: 'B',
+    commands: [
+      { cmd: "who's in conference 800", expect: 'List of participants in conf 800.' },
+      { cmd: 'kick PJSIP/1001 from conference 800', expect: 'Removes participant.', write: true },
+      { cmd: 'lock conference 800', expect: 'Locks conf — no new joins.', write: true },
+      { cmd: 'unlock conference 800', expect: 'Unlocks.', write: true },
+    ]
+  },
+  {
+    id: 'module-mgmt', title: 'Module Management', tier: 'B',
+    commands: [
+      { cmd: 'list modules', expect: 'All FreePBX modules with status.' },
+      { cmd: 'module status core', expect: 'Single module info.' },
+      { cmd: 'install module modulename', expect: 'fwconsole ma install <name>.', write: true },
+      { cmd: 'uninstall module modulename', expect: 'fwconsole ma uninstall.', write: true },
+      { cmd: 'enable module modulename', expect: 'fwconsole ma enable.', write: true },
+      { cmd: 'disable module modulename', expect: 'fwconsole ma disable.', write: true },
+      { cmd: 'upgrade module modulename', expect: 'fwconsole ma upgrade <name>.', write: true },
+      { cmd: 'upgrade all modules', expect: 'fwconsole ma upgradeall.', write: true },
+      { cmd: 'check reload', expect: 'Whether a reload is needed.' },
+      { cmd: 'reload', expect: 'fwconsole reload.', write: true },
+    ]
+  },
+  {
+    id: 'firewall', title: 'Firewall', tier: 'B',
+    commands: [
+      { cmd: 'show firewall', expect: 'Firewall status + zones.' },
+      { cmd: 'add 10.0.0.0/8 to zone trusted', expect: 'Adds IP/CIDR to a zone.', write: true },
+    ]
+  },
+  {
+    id: 'advanced-settings', title: 'Advanced Settings', tier: 'B',
+    commands: [
+      { cmd: 'list settings', expect: 'All advanced settings.' },
+      { cmd: 'show setting AMPWEBROOT', expect: 'Single setting value.' },
+      { cmd: 'set setting CFGRTSTATUS to enabled', expect: 'Updates a setting.', write: true },
+    ]
+  },
+  {
+    id: 'extensions-read', title: 'Extensions — Read', tier: 'C',
+    commands: [
+      { cmd: 'list extensions', expect: 'Every extension with name + tech.' },
+      { cmd: 'show extensions', expect: 'Same.' },
+      { cmd: 'find extension Mike', expect: 'Filtered list by name.' },
+      { cmd: 'search ext Davis', expect: 'Same.' },
+      { cmd: 'get extension 101', expect: 'Detail for ext 101.' },
+      { cmd: '101', expect: 'Bare ext — should resolve to extension detail.' },
+      { cmd: 'details ext 1005', expect: 'Detail for 1005.' },
+      { cmd: 'health 1005', expect: 'Extension health summary.' },
+      { cmd: 'status 1005', expect: 'Same.' },
+      { cmd: 'health check on 1005', expect: 'Same.' },
+    ]
+  },
+  {
+    id: 'trunks-read', title: 'Trunks — Read', tier: 'C',
+    commands: [
+      { cmd: 'list trunks', expect: 'All trunks.' },
+      { cmd: 'show trunks', expect: 'Same.' },
+      { cmd: 'trunk status 1', expect: 'Single trunk status.' },
+      { cmd: 'show trunk 1', expect: 'Same.' },
+    ]
+  },
+  {
+    id: 'ringgroups-read', title: 'Ring Groups — Read', tier: 'C',
+    commands: [
+      { cmd: 'list ringgroups', expect: 'All ring groups.' },
+      { cmd: 'list ring groups', expect: 'Same.' },
+      { cmd: 'show ringgroup 600', expect: 'Detail for RG 600.' },
+      { cmd: 'get rg 600', expect: 'Same.' },
+    ]
+  },
+  {
+    id: 'queues-read', title: 'Queues — Read', tier: 'C',
+    commands: [
+      { cmd: 'list queues', expect: 'All queues.' },
+      { cmd: 'show queue 400', expect: 'Detail for queue 400.' },
+      { cmd: 'show queue details 400', expect: 'Extended detail.' },
+    ]
+  },
+  {
+    id: 'voicemail-read', title: 'Voicemail — Read', tier: 'C',
+    commands: [
+      { cmd: 'list voicemails', expect: 'All voicemail boxes.' },
+      { cmd: 'show voicemail for 1001', expect: 'VM box detail for ext 1001.' },
+    ]
+  },
+  {
+    id: 'ivrs-announcements', title: 'IVRs / Announcements / Conferences / Paging / Parking', tier: 'C',
+    commands: [
+      { cmd: 'list ivrs', expect: 'All IVRs.' },
+      { cmd: 'show ivr 1', expect: 'IVR 1 detail.' },
+      { cmd: 'list announcements', expect: 'All announcements.' },
+      { cmd: 'list conferences', expect: 'All conferences.' },
+      { cmd: 'show conference 800', expect: 'Conference detail.' },
+      { cmd: 'list paging groups', expect: 'All paging groups.' },
+      { cmd: 'show paging 90', expect: 'Single paging group.' },
+      { cmd: 'list parking', expect: 'All parking lots.' },
+      { cmd: 'show parking lot 70', expect: 'Single parking lot.' },
+    ]
+  },
+  {
+    id: 'recordings-moh', title: 'Recordings, MOH, Feature Codes', tier: 'C',
+    commands: [
+      { cmd: 'list recordings', expect: 'All system recordings.' },
+      { cmd: 'list moh', expect: 'All Music-On-Hold categories.' },
+      { cmd: 'list feature codes', expect: 'All feature codes with status.' },
+      { cmd: 'list sound packs', expect: 'All installed sound packs.' },
+    ]
+  },
+  {
+    id: 'inbound-outbound-read', title: 'Inbound / Outbound Routes / DIDs — Read', tier: 'C',
+    commands: [
+      { cmd: 'list inbound routes', expect: 'Every inbound route.' },
+      { cmd: 'list outbound routes', expect: 'Every outbound route.' },
+      { cmd: 'show inbound route 5551234567', expect: 'Single inbound route detail.' },
+      { cmd: 'show outbound route 1', expect: 'Single outbound route.' },
+      { cmd: 'show patterns for 1', expect: 'Outbound route dial patterns.' },
+      { cmd: 'list dids', expect: 'All DIDs.' },
+      { cmd: 'show dids', expect: 'Same.' },
+    ]
+  },
+  {
+    id: 'cdr-analytics', title: 'CDR / Calls / Analytics', tier: 'C',
+    commands: [
+      { cmd: 'active calls', expect: 'All in-progress calls.' },
+      { cmd: 'who\'s on the phone', expect: 'Same as active calls (alt phrasing).' },
+      { cmd: 'live calls', expect: 'Same.' },
+      { cmd: 'call history', expect: 'Recent CDR.' },
+      { cmd: 'call history 20', expect: 'Last 20.' },
+      { cmd: 'cdr 50', expect: 'Last 50.' },
+      { cmd: 'calls from 1001', expect: 'CDR rows where src=1001.' },
+      { cmd: 'calls to 1001', expect: 'Where dst=1001.' },
+      { cmd: 'cdr stats', expect: 'Aggregate CDR stats.' },
+      { cmd: 'busiest extensions', expect: 'Top extensions by call volume.' },
+      { cmd: 'top extensions', expect: 'Same.' },
+      { cmd: 'peak hours', expect: 'Busiest hours of day.' },
+      { cmd: 'failed calls', expect: 'Recent unanswered/failed calls.' },
+    ]
+  },
+  {
+    id: 'system-info', title: 'System Info / Disk / Asterisk / IP', tier: 'C',
+    commands: [
+      { cmd: 'system info', expect: 'CPU, memory, OS info.' },
+      { cmd: 'sys info', expect: 'Same.' },
+      { cmd: 'disk space', expect: 'Mounted FS usage.' },
+      { cmd: 'uptime', expect: 'System uptime.' },
+      { cmd: 'asterisk info', expect: 'Asterisk version, channels, modules loaded.' },
+      { cmd: 'external ip', expect: 'Current public IP.' },
+      { cmd: 'audit', expect: 'Recent Frogman audit log entries.' },
+      { cmd: 'audit 20', expect: 'Last 20 audit entries.' },
+      { cmd: 'show audit', expect: 'Same.' },
+      { cmd: 'log', expect: 'Same.' },
+      { cmd: 'history', expect: 'Same.' },
+    ]
+  },
+  {
+    id: 'contacts-callbacks-cid', title: 'Contacts / Callbacks / CID Lookup', tier: 'C',
+    commands: [
+      { cmd: 'list contacts', expect: 'All contact-manager contacts.' },
+      { cmd: 'list directory', expect: 'Same.' },
+      { cmd: 'show contacts in group 1', expect: 'Filtered by group.' },
+      { cmd: 'list speed dials', expect: 'All speed dial entries.' },
+      { cmd: 'list callbacks', expect: 'All Callback Module entries.' },
+      { cmd: 'list cid lookup', expect: 'All CID Lookup sources.' },
+    ]
+  },
+  {
+    id: 'time-conditions', title: 'Time Conditions & Day/Night', tier: 'C',
+    commands: [
+      { cmd: 'list time conditions', expect: 'All time conditions.' },
+      { cmd: 'toggle time condition 1', expect: 'Flips override state.', write: true },
+      { cmd: 'list call flows', expect: 'All Day/Night call-flow controls.' },
+      { cmd: 'toggle daynight 1', expect: 'Flips day/night for control 1.', write: true },
+      { cmd: 'set daynight 1 to night', expect: 'Forces night state.', write: true },
+    ]
+  },
+  {
+    id: 'pjsip-diagnostics', title: 'PJSIP Diagnostics', tier: 'D',
+    commands: [
+      { cmd: 'ping 101', expect: 'PJSIPQualify on ext 101 — reachability ping.' },
+      { cmd: 'qualify 101', expect: 'Same.' },
+      { cmd: 'registrations', expect: 'All SIP registrations.' },
+      { cmd: 'show registrations', expect: 'Same.' },
+      { cmd: 'extension states', expect: 'BLF/presence for every extension.' },
+      { cmd: 'sip channels', expect: 'All active PJSIP channels.' },
+      { cmd: 'pjsip channels', expect: 'Same.' },
+      { cmd: 'sip channels for 1005', expect: 'Filtered by endpoint.' },
+      { cmd: 'endpoint details 101', expect: 'Deep PJSIP endpoint info — auth, transport, codecs.' },
+      { cmd: 'endpoint 101', expect: 'Same.' },
+      { cmd: 'show endpoint 101', expect: 'Same.' },
+    ]
+  },
+  {
+    id: 'sip-troubleshooting', title: 'SIP Troubleshooting / Composites', tier: 'D',
+    commands: [
+      { cmd: 'diagnose ext 101', expect: 'Composite — config, endpoint, qualify, active calls, recent CDR. Summary "Phone is NOT registered (no contacts)" on dev.' },
+      { cmd: 'diagnose extension 101', expect: 'Same.' },
+      { cmd: 'troubleshoot 101', expect: 'Same composite.' },
+      { cmd: 'debug 101', expect: 'Same.' },
+      { cmd: "why can't 101 make calls", expect: 'Same.' },
+      { cmd: "what's wrong with 101", expect: 'Same.' },
+      { cmd: 'diagnose trunk 1', expect: 'Trunk diagnostic — registration, qualify, routes, recent CDR.' },
+      { cmd: 'troubleshoot trunk 1', expect: 'Same.' },
+    ]
+  },
+  {
+    id: 'sip-trace', title: 'SIP Packet Trace', tier: 'D',
+    commands: [
+      { cmd: 'start sip trace', expect: 'Starts a 10s default capture.', write: true },
+      { cmd: 'start trace 15s', expect: 'Starts 15s capture.', write: true },
+      { cmd: 'begin sip trace 30s', expect: 'Maximum allowed duration.', write: true },
+      { cmd: 'stop trace', expect: 'Ends capture and returns parsed packets.', write: true },
+      { cmd: 'stop sip trace', expect: 'Same.', write: true },
+      { cmd: 'trace status', expect: 'Whether a capture is in progress.' },
+      { cmd: 'sip trace status', expect: 'Same.' },
+    ]
+  },
+  {
+    id: 'call-flow-trace', title: 'Call Flow Trace', tier: 'D',
+    commands: [
+      { cmd: 'trace call flow 5551234567', expect: 'Walks dialplan path for a DID.' },
+      { cmd: 'show flow for 5551234567', expect: 'Same.' },
+      { cmd: 'where does 5551234567 go', expect: 'Same.' },
+      { cmd: 'how does 5551234567 ring', expect: 'Same.' },
+    ]
+  },
+  {
+    id: 'license-services', title: 'Services & License', tier: 'C',
+    commands: [
+      { cmd: 'show pm2', expect: 'PM2-managed Node services status.' },
+      { cmd: 'show services', expect: 'Same.' },
+      { cmd: 'show processes', expect: 'Same.' },
+      { cmd: 'show license', expect: 'License + activation info.' },
+      { cmd: 'show sip settings', expect: 'PJSIP global settings.' },
+      { cmd: 'set external ip to 1.2.3.4', expect: 'Updates Asterisk SIP NAT external IP.', write: true },
+      { cmd: 'fwconsole ma list', expect: 'Module list via fwconsole.' },
+    ]
+  },
+  {
+    id: 'backups-storage', title: 'Backups / Storage / Certificates', tier: 'C',
+    commands: [
+      { cmd: 'list backups', expect: 'All backup jobs.' },
+      { cmd: 'show backup 1', expect: 'Single backup detail.' },
+      { cmd: 'list filestores', expect: 'All filestore configs.' },
+      { cmd: 'list certificates', expect: 'All system certs.' },
+      { cmd: 'list certs', expect: 'Same.' },
+    ]
+  },
+  {
+    id: 'kb-search', title: 'Knowledge Base / Search', tier: 'C',
+    commands: [
+      { cmd: 'how do I set up an outbound route?', expect: 'Question mark → falls through to KB search.' },
+      { cmd: 'why can\'t extension 101 make calls?', expect: 'KB search if no diagnose pattern matches.' },
+      { cmd: 'kb voicemail', expect: 'KB query "voicemail".' },
+      { cmd: 'docs trunk setup', expect: 'KB query "trunk setup".' },
+      { cmd: 'troubleshoot codec negotiation', expect: 'KB query "codec negotiation".' },
+      { cmd: 'search Mike', expect: 'Generic search across PBX objects.' },
+      { cmd: 'find Davis', expect: 'Same.' },
+      { cmd: 'who is 1005', expect: 'Reverse lookup.' },
+    ]
+  },
+  {
+    id: 'export', title: 'Exports', tier: 'C',
+    commands: [
+      { cmd: 'export extensions', expect: 'CSV/JSON export of extensions.' },
+      { cmd: 'export ringgroups', expect: 'Same for RGs.' },
+      { cmd: 'export dids', expect: 'Same for DIDs.' },
+      { cmd: 'export trunks', expect: 'Same for trunks.' },
+      { cmd: 'export queues', expect: 'Same for queues.' },
+      { cmd: 'export cdr', expect: 'Same for CDR.' },
+    ]
+  },
+  {
+    id: 'services-infra', title: 'Services & Infrastructure', tier: 'E',
+    commands: [
+      { cmd: 'start freepbx', expect: 'fwconsole start.', write: true },
+      { cmd: 'stop freepbx', expect: 'fwconsole stop.', write: true },
+      { cmd: 'restart freepbx', expect: 'fwconsole restart.', write: true },
+      { cmd: 'enable trunk 1', expect: 'Enables a trunk.', write: true },
+      { cmd: 'disable trunk 1', expect: 'Disables.', write: true },
+      { cmd: 'validate', expect: 'Security scan / config validation.' },
+      { cmd: 'fix permissions', expect: 'fwconsole chown.', write: true },
+      { cmd: 'list notifications', expect: 'All FreePBX notifications.' },
+      { cmd: 'show asterisk context from-internal', expect: 'Single context dialplan dump.' },
+      { cmd: 'sync userman', expect: 'Userman directory sync.', write: true },
+      { cmd: 'system update', expect: 'fwconsole sa update.', write: true },
+      { cmd: 'restart service ucp', expect: 'Restarts a specific PM2 service.', write: true },
+      { cmd: 'stop service restapps', expect: 'Stops a service.', write: true },
+      { cmd: 'update certificates', expect: 'Renews/refreshes certs.', write: true },
+      { cmd: 'rotate logs', expect: 'Asterisk log rotation.', write: true },
+    ]
+  },
+];
+
+// ─── render ───────────────────────────────────────────────────────────────
+const STATE_KEY = 'frogman_qa_state_v1.2.1';
+let state = JSON.parse(localStorage.getItem(STATE_KEY) || '{}');
+function save() { localStorage.setItem(STATE_KEY, JSON.stringify(state)); updateProgress(); }
+
+function el(tag, attrs={}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null) continue;
+    e.appendChild(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+  }
+  return e;
+}
+
+function renderToc() {
+  const toc = document.getElementById('toc');
+  toc.innerHTML = '<h3>Sections</h3>';
+  const tiers = { A: 'Recently Shipped', B: 'Writes', C: 'Reads', D: 'Diagnostics', E: 'Admin / Infra' };
+  for (const [tier, label] of Object.entries(tiers)) {
+    const ul = el('ul');
+    for (const s of SECTIONS.filter(x => x.tier === tier)) {
+      ul.appendChild(el('li', {},
+        el('a', { href: '#'+s.id, 'data-section': s.id },
+          el('span', { class: 'tier-label tier-'+s.tier }, s.tier),
+          s.title
+        )
+      ));
+    }
+    if (ul.children.length) {
+      toc.appendChild(el('h3', {}, label));
+      toc.appendChild(ul);
+    }
+  }
+}
+
+function renderMain() {
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+  for (const s of SECTIONS) {
+    const cmds = el('div', { class: 'commands' });
+    s.commands.forEach((c, idx) => {
+      const stateKey = s.id + '|' + idx;
+      const st = state[stateKey] || {};
+      const cmdEl = el('div', { class: 'cmd' + (st.status ? ' '+statusClass(st.status) : '') },
+        el('div', { class: 'cmd-text' },
+          el('div', { class: 'cmd-line' },
+            el('code', { class: 'cmd-code' }, c.cmd),
+            el('button', { class: 'cmd-copy', onclick: ev => copyCmd(ev, c.cmd) }, 'Copy'),
+            c.write ? el('span', { style: 'font-size:11px; color:var(--fail); font-weight:600;' }, '✎ WRITE — confirm required') : null
+          ),
+          c.expect ? el('div', { class: 'cmd-expect' }, c.expect) : null,
+          el('textarea', { class: 'notes', placeholder: 'Notes…', onchange: ev => { st.notes = ev.target.value; state[stateKey] = st; save(); } }, st.notes || '')
+        ),
+        el('div', { class: 'cmd-status' },
+          ['pass','fail','skip'].map(state =>
+            el('button', {
+              class: 'status-btn' + (st.status === state ? ' active' : ''),
+              'data-state': state,
+              onclick: ev => setStatus(ev, stateKey, state)
+            }, state.toUpperCase())
+          )
+        )
+      );
+      cmds.appendChild(cmdEl);
+    });
+
+    const section = el('section', { class: 'section', id: s.id },
+      el('h2', {},
+        el('span', {}, s.title),
+        el('span', { class: 'tier-badge' }, 'Tier '+s.tier+' · '+s.commands.length+' cmd'+(s.commands.length===1?'':'s'))
+      ),
+      s.blurb ? el('div', { class: 'section-blurb' }, s.blurb) : null,
+      cmds
+    );
+    main.appendChild(section);
+  }
+}
+
+function statusClass(s) { return s === 'pass' ? 'passed' : s === 'fail' ? 'failed' : 'skipped'; }
+
+function setStatus(ev, key, status) {
+  const cmd = ev.target.closest('.cmd');
+  cmd.classList.remove('passed','failed','skipped');
+  const cur = state[key] || {};
+  if (cur.status === status) {
+    delete cur.status;
+  } else {
+    cur.status = status;
+    cmd.classList.add(statusClass(status));
+  }
+  state[key] = cur;
+  // Update active class on buttons
+  cmd.querySelectorAll('.status-btn').forEach(b => b.classList.toggle('active', b.dataset.state === cur.status));
+  save();
+}
+
+function copyCmd(ev, cmd) {
+  navigator.clipboard.writeText(cmd).then(() => {
+    const b = ev.target;
+    b.textContent = 'Copied!';
+    b.classList.add('copied');
+    setTimeout(() => { b.textContent = 'Copy'; b.classList.remove('copied'); }, 1200);
+  });
+}
+
+function updateProgress() {
+  let total = 0, done = 0;
+  for (const s of SECTIONS) {
+    for (let i=0; i<s.commands.length; i++) {
+      total++;
+      const k = s.id+'|'+i;
+      if (state[k] && state[k].status) done++;
+    }
+  }
+  document.getElementById('progress-text').textContent = done+' / '+total;
+  document.getElementById('progress-fill').style.width = total ? (done/total*100)+'%' : '0%';
+}
+
+function applyFilter(q) {
+  q = q.trim().toLowerCase();
+  document.querySelectorAll('.section').forEach(sec => {
+    let any = false;
+    sec.querySelectorAll('.cmd').forEach(cmd => {
+      const t = cmd.textContent.toLowerCase();
+      const match = !q || t.includes(q);
+      cmd.classList.toggle('hidden', !match);
+      if (match) any = true;
+    });
+    const titleMatch = !q || sec.querySelector('h2').textContent.toLowerCase().includes(q);
+    sec.classList.toggle('hidden', !any && !titleMatch);
+  });
+}
+
+function exportResults() {
+  const lines = ['Frogman v1.2.1 QA Results — '+new Date().toISOString()];
+  for (const s of SECTIONS) {
+    let any = false;
+    const block = ['', '## '+s.title+' (Tier '+s.tier+')'];
+    s.commands.forEach((c, i) => {
+      const k = s.id+'|'+i;
+      const st = state[k];
+      if (!st || !st.status) return;
+      any = true;
+      block.push('  ['+st.status.toUpperCase()+'] '+c.cmd + (st.notes ? '  // '+st.notes : ''));
+    });
+    if (any) lines.push(...block);
+  }
+  const txt = lines.join('\n');
+  const blob = new Blob([txt], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'frogman-qa-results-'+new Date().toISOString().slice(0,10)+'.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function reset() {
+  if (!confirm('Clear all pass/fail/skip marks and notes?')) return;
+  state = {};
+  save();
+  renderMain();
+}
+
+renderToc();
+renderMain();
+updateProgress();
+document.getElementById('filter').addEventListener('input', e => applyFilter(e.target.value));
+document.getElementById('export-btn').addEventListener('click', exportResults);
+document.getElementById('reset-btn').addEventListener('click', reset);
+</script>
+</body>
+</html>
