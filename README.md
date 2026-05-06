@@ -17,21 +17,45 @@ Also includes a web console and CLI chat for direct access. Built entirely on Fr
 
 ## Installation
 
+Pick whichever path fits — all three install the same module.
+
+### Option 1: Module Admin GUI (recommended)
+
+1. Download the latest tarball from the [Releases page](https://github.com/mwtcmi/frogman/releases/latest) (`frogman-x.x.x.tgz`).
+2. In FreePBX, go to **Admin → Module Admin**.
+3. Click **Upload modules**, choose the `.tgz`, and click **Upload**.
+4. Find **Frogman** in the module list, set the action to **Install**, click **Process**, then **Confirm**.
+5. When the red **Apply Config** bar appears, click it.
+
+### Option 2: One-line CLI install
+
+Grabs the latest release URL from the GitHub API and installs it — no version to update:
+
+```bash
+URL=$(curl -s https://api.github.com/repos/mwtcmi/frogman/releases/latest | grep browser_download_url | grep '\.tgz' | cut -d'"' -f4)
+fwconsole ma downloadinstall "$URL"
+fwconsole reload
+```
+
+Or grab the URL by hand from the [latest release page](https://github.com/mwtcmi/frogman/releases/latest) and pass it directly to `fwconsole ma downloadinstall`.
+
+### Option 3: Manual install (developers)
+
 ```bash
 # Copy the module to your FreePBX modules directory
 cp -r frogman /var/www/html/admin/modules/
 
 # Install the module
-fwconsole ma install frogman
+fwconsole ma installlocal frogman
 
-# Set permissions
+# Set permissions and apply
 fwconsole chown
-
-# Apply config
 fwconsole reload
 ```
 
-Verify it's installed:
+Use `installlocal` (not `install`) — `install` hits online repos and fails because Frogman isn't published to FreePBX's standard repos.
+
+### Verify
 
 ```bash
 fwconsole ma list | grep frogman
