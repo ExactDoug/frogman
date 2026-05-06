@@ -22,6 +22,23 @@ class ModuleUpgrade extends AbstractTool {
 		$output = []; $exitCode = 0;
 		exec($cmd, $output, $exitCode);
 		$out = implode("\n", $output);
-		return ['dry_run' => false, 'message' => "Module upgrade completed", 'output' => $out, 'needs_reload' => true];
+
+		// fwconsole sometimes exits 0 for hard errors (unknown module, missing locally) — catch those.
+		if (preg_match('/is not a locally installed module|module not found/i', $out)) {
+			throw new \Exception("Upgrade failed: {$out}");
+		}
+		if ($exitCode !== 0) {
+			throw new \Exception("Upgrade failed: {$out}");
+		}
+
+		// No-op cases. Single-module path emits "is the same as the online version";
+		// upgradeall emits a standalone "Up to date.".
+		if (preg_match('/is the same as the online version|already up[- ]?to[- ]?date|^\s*Up to date\.?\s*$/im', $out)) {
+			$label = ($name === 'all') ? 'All modules are' : "Module `{$name}` is";
+			return ['dry_run' => false, 'message' => "{$label} already up-to-date.", 'output' => $out];
+		}
+
+		$label = ($name === 'all') ? 'All modules upgraded' : "Module `{$name}` upgraded";
+		return ['dry_run' => false, 'message' => $label, 'output' => $out, 'needs_reload' => true];
 	}
 }
