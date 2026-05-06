@@ -271,6 +271,17 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 				$ctx = $data['context'] ?? 'custom';
 				return "**Preview — " . $ctx . ":**\n```\n" . $data['dialplan'] . "\n```\n{{cmd:yes|✅ Yes}} {{cmd:no|❌ No}}";
 			}
+			// Recording: show mode chips alongside Yes/No so user can swap mode in one click.
+			if ($toolName === 'fm_set_recording') {
+				$ext = $data['ext'] ?? null;
+				if (!$ext) {
+					// Best-effort recovery from message text "extension {ext}"
+					if (preg_match('/extension\s+(\d+)/', $data['message'] ?? '', $em)) $ext = $em[1];
+				}
+				$msg = preg_replace('/\s*(Pass|Send)\s+confirm[:\s]true\s+to\s+execute\.?\s*/i', '', $data['message'] ?? '');
+				$chips = $this->recordingModeChips($ext);
+				return rtrim($msg, '. ') . ".\n\nPick a mode: " . $chips . "\n\n{{cmd:yes|✅ Confirm}} {{cmd:no|❌ Cancel}}";
+			}
 			$msg = $data['message'] ?? 'Action requires confirmation.';
 			// Strip API-oriented confirm instructions — the chat UI handles this
 			$msg = preg_replace('/\s*(Pass|Send)\s+confirm[:\s]true\s+to\s+execute\.?\s*/i', '', $msg);
@@ -297,6 +308,22 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 
 		// Format based on tool
 		switch ($toolName) {
+			case 'fm_set_recording':
+				$ext = $data['ext'] ?? null;
+				if (!$ext && preg_match('/extension\s+(\d+)/', $data['message'] ?? '', $em)) $ext = $em[1];
+				$msg = $data['message'] ?? 'Call recording updated.';
+				if (!empty($data['success']) || !isset($data['success'])) {
+					$onDemand = $data['on_demand'] ?? 'disabled';
+					$note = "Applies to all four call directions (inbound/outbound × external/internal). On-demand recording (`*1` feature code) is currently `{$onDemand}` — separate setting, unchanged.";
+					$link = !empty($data['extension_url'])
+						? "[Open extension {$ext} → Advanced for per-direction control]({$data['extension_url']})"
+						: '';
+					$out = rtrim($msg, '. ') . ".\n\n" . $note . "\n\nChange mode: " . $this->recordingModeChips($ext);
+					if ($link) $out .= "\n\n" . $link;
+					return $out;
+				}
+				return "⚠️ " . rtrim($msg, '. ') . ".\n\nTry again: " . $this->recordingModeChips($ext);
+
 			case 'fm_list_extensions':
 				if (empty($data['extensions'])) {
 					return "No extensions found.";
@@ -1856,6 +1883,23 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 	 * Return a follow-up offer after a tool completes.
 	 * Returns ['tool' => ..., 'params' => ..., 'question' => ...] or null.
 	 */
+	private function recordingModeChips($ext) {
+		$ext = $ext ? (string)$ext : '';
+		$prefix = "set recording on {$ext} to ";
+		$modes = [
+			'force'    => 'Force',
+			'yes'      => 'Yes',
+			'dontcare' => "Don't Care",
+			'no'       => 'No',
+			'never'    => 'Never',
+		];
+		$chips = [];
+		foreach ($modes as $val => $label) {
+			$chips[] = '{{cmd:' . $prefix . $val . '|' . $label . '}}';
+		}
+		return implode(' &nbsp;|&nbsp; ', $chips);
+	}
+
 	public function getFollowUpOffer($toolName, $result, $params) {
 		if ($result['status'] !== 'success') return null;
 		$data = $result['data'] ?? [];

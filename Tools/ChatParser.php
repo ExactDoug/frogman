@@ -387,13 +387,13 @@ class ChatParser {
 		}
 
 		// ── Recording ──
-		if (preg_match('/^(enable|set)\s+(recording|record)\s+(on\s+|for\s+)?(\d+)(\s+(?:to\s+)?(always|force))?$/i', $msg, $m)) {
-			$mode = !empty($m[6]) ? strtolower($m[6]) : 'always';
+		if (preg_match("/^(enable|set|turn\\s+on)\\s+(?:call\\s+)?(recording|record)\\s+(on\\s+|for\\s+)?(\\d+)(\\s+(?:to\\s+)?(force|yes|don'?t\\s*care|dontcare|no|never|always|on|off|enable|enabled|disable|disabled))?$/i", $msg, $m)) {
+			$mode = !empty($m[6]) ? strtolower(preg_replace("/[^a-z]/i", '', $m[6])) : 'always';
 			$params = ['ext' => $m[4], 'mode' => $mode];
 			self::setPending($sessionId, 'fm_set_recording', $params);
 			return ['tool' => 'fm_set_recording', 'params' => $params];
 		}
-		if (preg_match('/^(disable|stop)\s+(recording|record)\s+(on\s+|for\s+)?(\d+)$/i', $msg, $m)) {
+		if (preg_match('/^(disable|stop|turn\s+off)\s+(?:call\s+)?(recording|record)\s+(on\s+|for\s+)?(\d+)$/i', $msg, $m)) {
 			$params = ['ext' => $m[4], 'mode' => 'never'];
 			self::setPending($sessionId, 'fm_set_recording', $params);
 			return ['tool' => 'fm_set_recording', 'params' => $params];
