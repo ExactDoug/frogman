@@ -949,12 +949,24 @@ class ChatParser {
 		if (preg_match('/^(show|get)\s+(inbound\s+)?route\s+(.+)$/i', $msg, $m)) {
 			return ['tool' => 'fm_get_inbound_route', 'params' => ['extension' => trim($m[3])]];
 		}
+		// One-shot: "add inbound route 5551234567 to 1001". Tool's resolveDestination()
+		// handles plain numbers + shorthand (vm/rg/ivr/tc), so we just pass through.
 		if (preg_match('/^(add|create)\s+(inbound\s+)?route\s+(\S+)\s+(?:to|→)\s+(.+)$/i', $msg, $m)) {
-			$dest = trim($m[4]);
-			if (is_numeric($dest)) $dest = "from-internal,{$dest},1";
-			$params = ['extension' => $m[3], 'destination' => $dest];
+			$params = ['extension' => $m[3], 'destination' => trim($m[4])];
 			self::setPending($sessionId, 'fm_add_inbound_route', $params);
 			return ['tool' => 'fm_add_inbound_route', 'params' => $params];
+		}
+		// Wizard: bare "add inbound route" (or with DID pre-filled). Asks DID, destination, optional CID.
+		if (preg_match('/^(add|create)\s+(inbound\s+)?route(?:\s+(\S+))?$/i', $msg, $m)) {
+			$preset = !empty($m[3]) ? ['extension' => $m[3]] : [];
+			$prompts = [];
+			if (empty($preset['extension'])) {
+				$prompts[] = ['param' => 'extension', 'prompt' => "What's the inbound DID? (e.g. `5551234567` or `+15551234567`)"];
+			}
+			$prompts[] = ['param' => 'destination', 'prompt' => "Where should it route? Type an extension number (e.g. `1001`), `vm 1001`, `rg 600`, `ivr 1`, `tc 1`, or a full destination string."];
+			$prompts[] = ['param' => 'cidnum', 'prompt' => "Optional CID match — number to match in the caller ID, or {{cmd:skip|⏭ Skip (any caller)}}.", 'skip_default' => null];
+			self::setInputWizard($sessionId, 'fm_add_inbound_route', $preset, $prompts);
+			return ['response' => $prompts[0]['prompt']];
 		}
 		if (preg_match('/^(remove|delete)\s+(inbound\s+)?route\s+(\S+)$/i', $msg, $m)) {
 			$params = ['extension' => $m[3]];
@@ -1645,6 +1657,8 @@ class ChatParser {
 **Inbound Routes:**
   `list inbound routes` / `show inbound route 5551234567`
   `add inbound route 5551234567 to 1001`
+  `add inbound route` — guided wizard (asks DID, destination, optional CID)
+  `add inbound route 5551234567` — wizard with DID pre-filled
   `remove inbound route 5551234567`
 
 **Ring Group Management:**
