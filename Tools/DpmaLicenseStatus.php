@@ -31,18 +31,18 @@ class DpmaLicenseStatus extends AbstractTool {
 		$valid = ($statusLine !== null && stripos($statusLine, 'valid') !== false && stripos($statusLine, 'ok') !== false)
 			|| (isset($parsed['status']) && stripos($parsed['status'], 'valid') !== false);
 
-		// Cross-reference EPM-side licensed list
+		// Cross-reference EPM module flags + per-brand phone counts
+		$endpoint = \FreePBX::Endpoint();
 		$epmLicensed = null;
-		try {
-			$epmLicensed = \FreePBX::Endpoint()->getLicensed();
-		} catch (\Throwable $e) {
-			$epmLicensed = null;
-		}
+		$brandCounts = null;
+		try { $epmLicensed = $endpoint->getLicensed(); } catch (\Throwable $e) {}
+		try { $brandCounts = $endpoint->endpointCheckLicense(); } catch (\Throwable $e) {}
 
 		return [
 			'valid' => $valid,
 			'status_line' => $statusLine,
 			'parsed' => $parsed,
+			'brand_counts' => $brandCounts,
 			'epm_licensed' => $epmLicensed,
 			'raw' => $raw,
 		];

@@ -953,14 +953,23 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 
 			case 'fm_dpma_license_status':
 				$valid = !empty($data['valid']);
-				$badge = $valid ? '✓' : '✗';
-				$line1 = "📞 **DPMA License**: {$badge} " . ($data['status_line'] ?? ($valid ? 'valid' : 'unknown'));
-				$lines = [$line1];
-				if (!empty($data['epm_licensed']) && is_array($data['epm_licensed'])) {
-					$ep = $data['epm_licensed'];
-					if (isset($ep['epm']) || isset($ep['ucp'])) {
-						$lines[] = "  EPM: " . (!empty($ep['epm']) ? '✓' : '✗') . "  UCP: " . (!empty($ep['ucp']) ? '✓' : '✗');
-					}
+				$statusBadge = $valid ? '✓' : '✗';
+				$statusText = $data['status_line'] ?? ($valid ? 'valid' : 'unknown');
+				// Strip the "OK, " prefix DPMA prepends to its own status line — redundant with the badge.
+				$statusText = preg_replace('/^OK,\s*/i', '', $statusText);
+				$lines = ["📞 **DPMA License**"];
+				$lines[] = "  Status: {$statusBadge} {$statusText}";
+				$bc = $data['brand_counts'] ?? null;
+				if (is_array($bc)) {
+					$sang = (int)($bc['sangoma'] ?? 0);
+					$digi = (int)($bc['digium'] ?? 0);
+					$lines[] = "  Sangoma phones licensed: {$sang}";
+					$lines[] = "  Digium phones licensed: {$digi}";
+				}
+				$ep = $data['epm_licensed'] ?? null;
+				if (is_array($ep)) {
+					if (isset($ep['epm'])) $lines[] = "  EPM module: " . (!empty($ep['epm']) ? '✓' : '✗');
+					if (isset($ep['ucp'])) $lines[] = "  UCP module: " . (!empty($ep['ucp']) ? '✓' : '✗');
 				}
 				return implode("\n", $lines);
 
@@ -1613,9 +1622,13 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 					$lines[] = "  ⏱️ Uptime: {$up}";
 				}
 				$callIcon = $data['active_calls'] > 0 ? '🔴' : '📞';
-				$lines[] = "  {$callIcon} Active Calls: **{$data['active_calls']}**";
-				$lines[] = "  📱 Extensions: {$data['registered']}/{$data['extensions']} registered";
-				if ($data['trunks'] > 0) $lines[] = "  📡 Trunks: {$data['trunks']}";
+				if ($data['active_calls'] > 0) {
+					$lines[] = "  {$callIcon} Active Calls: {{cmd:who's on the phone|**{$data['active_calls']}** — see who's on}}";
+				} else {
+					$lines[] = "  {$callIcon} Active Calls: **0**";
+				}
+				$lines[] = "  📱 Extensions: {{cmd:registrations|{$data['registered']}/{$data['extensions']} registered}}";
+				if ($data['trunks'] > 0) $lines[] = "  📡 Trunks: {{cmd:list trunks|{$data['trunks']}}}";
 				// Notifications summary
 				$notifParts = [];
 				if ($data['errors'] > 0) $notifParts[] = "🔴 {$data['errors']} errors";
