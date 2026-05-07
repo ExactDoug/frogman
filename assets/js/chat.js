@@ -80,6 +80,15 @@ $(function() {
 
 	function sendMessage(text) {
 		if (!text.trim() || sending) return;
+		// Catch unfilled <placeholder> tokens before they hit the parser, since the
+		// parser will just fuzzy-suggest and lose the user's intent.
+		var ph = text.match(/<[^<>]+>/);
+		if (ph) {
+			$input.focus();
+			selectFirstPlaceholder($input[0]);
+			addMessage("Replace the highlighted `" + ph[0] + "` with the value you want, then send.", 'bot');
+			return;
+		}
 		commandHistory.unshift(text.trim());
 		historyIndex = -1;
 		sending = true;
@@ -172,12 +181,22 @@ $(function() {
 		}).join('');
 		$typeahead.html(html).prop('hidden', false);
 	}
+	// After pasting/picking a template, select the first <placeholder> token so the
+	// user can immediately type to replace it. Falls back to cursor-at-end.
+	function selectFirstPlaceholder(el) {
+		var v = el.value;
+		var m = v.match(/<[^<>]+>/);
+		if (m) {
+			var start = v.indexOf(m[0]);
+			el.setSelectionRange(start, start + m[0].length);
+		} else {
+			el.setSelectionRange(v.length, v.length);
+		}
+	}
 	function typeaheadSelect(idx) {
 		if (idx < 0 || idx >= typeaheadCurrent.length) return;
 		$input.val(typeaheadCurrent[idx]).focus();
-		// Cursor at end so user can append params if needed.
-		var el = $input[0];
-		el.setSelectionRange(el.value.length, el.value.length);
+		selectFirstPlaceholder($input[0]);
 		typeaheadHide();
 	}
 	$input.off('input').on('input', function() {
@@ -258,9 +277,7 @@ $(function() {
 		var paste = $(this).data('paste');
 		if (paste) {
 			$input.val(paste).focus();
-			// Put cursor at end
-			var el = $input[0];
-			el.setSelectionRange(paste.length, paste.length);
+			selectFirstPlaceholder($input[0]);
 			return;
 		}
 		var cmd = $(this).data('cmd');

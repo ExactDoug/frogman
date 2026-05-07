@@ -1885,69 +1885,69 @@ class ChatParser {
 
 **Extensions:**
   `list extensions` — show all
-  `1001` — details for ext 1001
-  `health 1001` — health check
+  `health <ext>` — health check
   `onboard new employee` — guided macro wizard (extension + voicemail + Follow Me + ring group + DID + outbound CID, all in one flow)
-  `create extension 1002 for Jane Doe`
-  `rename extension 1001 to Mike White`
-  `delete extension 1002`
+  `create extension <ext> for <name>`
+  `rename extension <ext> to <name>`
+  `delete extension <ext>`
 
 **Call Routing:**
   `list inbound routes` — all DIDs
   `list outbound routes` — all outbound routes
-  `show outbound route 1`
+  `show outbound route <id>`
 
 **Calls & CDR:**
   `active calls` — calls in progress
-  `call history 10` — recent CDR
-  `calls from 1001`
+  `call history <n>` — recent CDR
+  `calls from <ext>`
 
 **Trunks:**
-  `list trunks` / `trunk status 1`
+  `list trunks`
+  `trunk status <id>`
   `enable trunk` / `disable trunk` — pick from the trunk list
 
 **Ring Groups:**
-  `list ringgroups` / `show ringgroup 600`
-  `add 1001 to ringgroup 600`
-  `remove 1001 from ringgroup 600`
+  `list ringgroups` / `show ringgroup <grp>`
+  `add <ext> to ringgroup <grp>`
+  `remove <ext> from ringgroup <grp>`
 
 **Queues:**
-  `list queues` / `show queue 400`
+  `list queues` / `show queue <id>`
 
 **Follow Me:**
-  `set followme on 1001 to 1001,5551234567`
+  `set followme on <ext> to <numbers>`
   `set follow me` — guided wizard (asks ext, numbers, ringtime)
-  `set follow me 1001` — wizard skipping the ext prompt
-  `clear followme on 1001`
+  `set follow me <ext>` — wizard skipping the ext prompt
+  `clear followme on <ext>`
 
 **Call Forward:**
-  `forward 1001 to 5551234567`
-  `show forward on 1001`
-  `clear forward on 1001`
+  `forward <ext> to <number>`
+  `show forward on <ext>`
+  `clear forward on <ext>`
 
 **Do Not Disturb:**
-  `enable dnd on 1001` / `disable dnd on 1001`
-  `show dnd on 1001`
+  `enable dnd on <ext>` / `disable dnd on <ext>`
+  `show dnd on <ext>`
 
 **Blacklist:**
   `list blacklist`
-  `block 5551234567` / `unblock 5551234567`
+  `block <number>` / `unblock <number>`
 
 **Time Conditions & Day/Night:**
   `list time conditions`
-  `toggle time condition 1`
-  `list call flows` / `toggle daynight 1`
-  `set daynight 1 to night`
+  `toggle time condition <id>`
+  `list call flows` / `toggle daynight <id>`
+  `set daynight <id> to <day|night>`
 
 **Voicemail:**
-  `list voicemails` / `show voicemail for 1001`
+  `list voicemails` / `show voicemail for <ext>`
 
 **IVRs & Announcements:**
-  `list ivrs` / `show ivr 1`
+  `list ivrs` / `show ivr <id>`
   `list announcements`
 
 **Conferences & Paging:**
-  `list conferences` / `show conference 800`
+  `list conferences` / `show conference <id>`
   `list paging groups`
 
 **Parking:**
@@ -1963,125 +1963,124 @@ class ChatParser {
   `reload` / `list modules` (summary; click a license bucket to drill in)
   `list all modules` / `list modules <commercial|gpl|gpl2|gpl3|agpl|other>`
   `check for upgrades` — query online repos (~10s)
-  `module status core`
+  `module status <name>`
   `asterisk info` / `uptime`
   `show sip settings` / `show firewall`
-  `audit 10`
+  `audit <n>`
   `repair userman` / `fix ucp logins` — restore default-group + assigned wiring for UCP login
-  `repair userman 1001` — repair just one extension
+  `repair userman <ext>` — repair just one extension
 
 **Misc Destinations:**
   `list destinations`
-  `add destination "After Hours" to voicemail 1001`
-  `remove destination 1`
+  `add destination "<label>" to voicemail <ext>`
+  `remove destination <id>`
 
 **Dialplan Builder:**
-  `show dialplan` / `show context oc-ivr-8000`
+  `show dialplan` / `show context <name>`
   `show templates`
-  `create menu on 8000 press 1 for 600 press 2 for 601`
-  `create time route for 1001 business hours to 600 after hours to voicemail`
-  `send webhook to https://example.com/hook after every call`
-  `route calls from 212 to 700`
-  `create failover 1001 1002 1003 then voicemail`
-  `create feature code *99 that reads back my extension`
-  `remove context oc-ivr-8000`
+  `create menu on <ext> press <key> for <dest> press <key> for <dest>`
+  `create time route for <ext> business hours to <dest> after hours to <dest>`
+  `send webhook to <url> after every call`
+  `route calls from <area> to <ext>`
+  `create failover <ext1> <ext2> <ext3> then voicemail`
+  `create feature code <code> that reads back my extension`
+  `remove context <name>`
 
 **Inbound Routes:**
-  `list inbound routes` / `show inbound route 5551234567`
-  `add inbound route 5551234567 to 1001`
+  `list inbound routes` / `show inbound route <DID>`
+  `add inbound route <DID> to <dest>`
   `add inbound route` — guided wizard (asks DID, destination, optional CID)
-  `add inbound route 5551234567` — wizard with DID pre-filled
-  `remove inbound route 5551234567`
+  `add inbound route <DID>` — wizard with DID pre-filled
+  `remove inbound route <DID>`
 
 **Ring Group Management:**
-  `create ringgroup 700 with 1001,1002,1003`
-  `delete ringgroup 700`
+  `create ringgroup <grp> with <ext>,<ext>,<ext>`
+  `delete ringgroup <grp>`
 
 **Module Management:**
-  `install module modulename` / `uninstall module modulename`
-  `enable module modulename` / `disable module modulename`
-  `upgrade module modulename` / `upgrade all modules`
+  `install module <name>` / `uninstall module <name>`
+  `enable module <name>` / `disable module <name>`
+  `upgrade module <name>` / `upgrade all modules`
   `check reload`
 
 **Voicemail:**
-  `enable voicemail on 1001` / `disable voicemail on 1001`
+  `enable voicemail on <ext>` / `disable voicemail on <ext>`
 
 **Advanced Settings:**
-  `list settings` / `show setting AMPWEBROOT`
-  `set setting KEY to VALUE`
+  `list settings` / `show setting <key>`
+  `set setting <key> to <value>`
 
 **Firewall:**
-  `show firewall` / `add 10.0.0.0/8 to zone trusted`
+  `show firewall` / `add <network> to zone <zone>`
 
 **Backups & Storage:**
-  `list backups` / `show backup 1`
+  `list backups` / `show backup <id>`
   `list filestores` / `list certificates`
 
 **Services & License:**
   `show pm2` / `show license`
-  `set external ip to 1.2.3.4`
+  `set external ip to <ip>`
   `fwconsole ma list`
 
 **Live Call Control:**
-  `call 1001 to 5551234567` — click-to-call
-  `hangup PJSIP/1001-00000001` — hang up a channel
-  `transfer PJSIP/1001-00000001 to 1002`
-  `park PJSIP/1001-00000001`
-  `record PJSIP/1001-00000001` / `stop recording ...`
-  `mute PJSIP/1001-00000001` / `unmute ...`
+  `call <ext> to <number>` — click-to-call
+  `hangup <channel>` — hang up a channel
+  `transfer <channel> to <ext>`
+  `park <channel>`
+  `record <channel>` / `stop recording <channel>`
+  `mute <channel>` / `unmute <channel>`
 
 **Queue Agents:**
-  `add 1001 to queue 400` / `remove 1001 from queue 400`
-  `pause 1001 in queue 400` / `unpause 1001 in queue 400`
-  `queue status` / `queue status 400`
+  `add <ext> to queue <id>` / `remove <ext> from queue <id>`
+  `pause <ext> in queue <id>` / `unpause <ext> in queue <id>`
+  `queue status` / `queue status <id>`
 
 **Conference Control:**
-  `who's in conference 800`
-  `kick PJSIP/1001 from conference 800`
-  `lock conference 800` / `unlock conference 800`
+  `who's in conference <id>`
+  `kick <channel> from conference <id>`
+  `lock conference <id>` / `unlock conference <id>`
 
 **PJSIP & Diagnostics:**
-  `ping 1001` — qualify endpoint
+  `ping <ext>` — qualify endpoint
   `registrations` — show all SIP registrations
   `extension states` — BLF/presence for all extensions
   `rotate logs`
 
 **SIP Troubleshooting:**
-  `diagnose extension 1005` — full diagnostic (registration, qualify, calls, CDR)
-  `troubleshoot 1005` — same as above
-  `why can't 1005 make calls` — same as above
-  `diagnose trunk 1` — trunk diagnostic (registration, qualify, routes, CDR)
-  `endpoint details 1005` — deep PJSIP endpoint info (codecs, transport, auth)
+  `diagnose extension <ext>` — full diagnostic (registration, qualify, calls, CDR)
+  `troubleshoot <ext>` — same as above
+  `why can't <ext> make calls` — same as above
+  `diagnose trunk <id>` — trunk diagnostic (registration, qualify, routes, CDR)
+  `endpoint details <ext>` — deep PJSIP endpoint info (codecs, transport, auth)
 
 **Sangoma / DPMA Phones:** (Sangoma-branded phones only)
   `list sangoma phones` — every Sangoma phone DPMA knows about
-  `sangoma phone 1005` — DPMA detail for one phone (model, firmware, IP, state)
-  `diagnose sangoma 1005` — composite (mapping, license, registration, firmware, alerts, qualify)
-  `dpma alerts` / `sangoma alerts 1005` — phone-side issues DPMA has flagged
+  `sangoma phone <ext>` — DPMA detail for one phone (model, firmware, IP, state)
+  `diagnose sangoma <ext>` — composite (mapping, license, registration, firmware, alerts, qualify)
+  `dpma alerts` / `sangoma alerts <ext>` — phone-side issues DPMA has flagged
   `dpma license` — license usage and headroom
-  `reboot sangoma 1005` — reboot a Sangoma phone (~30s downtime, requires confirm)
+  `reboot sangoma <ext>` — reboot a Sangoma phone (~30s downtime, requires confirm)
   `sip channels` — show active SIP channels
-  `sip channels for 1005` — filtered by endpoint
-  `start sip trace` / `start trace 15s` — capture SIP traffic (admin, max 30s)
+  `sip channels for <ext>` — filtered by endpoint
+  `start sip trace` / `start trace <duration>` — capture SIP traffic (admin, max 30s)
   `stop trace` — stop and show results
   `trace status` — check if trace is running
 
 **Services & Infrastructure:**
   `start freepbx` / `stop freepbx` / `restart freepbx`
-  `enable trunk 1` / `disable trunk 1`
   `validate` — security scan
   `fix permissions` — run chown
   `external ip` — get public IP
   `list notifications`
   `list sound packs`
-  `show asterisk context from-internal`
+  `show asterisk context <name>`
   `sync userman` / `system update`
-  `restart service ucp` / `stop service restapps`
+  `restart service <name>` / `stop service <name>`
   `update certificates`
 
 **Permissions:**
   `list permissions` — show user permission levels
-  `set permission username to read/write/admin`
+  `set permission <user> to <read|write|admin>`
 
   Permission levels: **read** (view only), **write** (create/modify/delete PBX objects), **admin** (system management, modules, firewall)
 

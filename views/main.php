@@ -33,15 +33,15 @@
 			<div class="oc-sidebar-header">Commands</div>
 			<div class="oc-sidebar-body">
 				<div class="oc-guide-group">
-					<button class="oc-quick-btn oc-write-btn" data-paste="create extension 1005 for ">create extension [ext] for [name]</button>
-					<button class="oc-quick-btn oc-write-btn" data-paste="forward 1001 to ">forward [ext] to [number]</button>
-					<button class="oc-quick-btn oc-write-btn" data-paste="enable voicemail on ">enable voicemail on [ext]</button>
-					<button class="oc-quick-btn oc-write-btn" data-paste="block ">block [number]</button>
-					<button class="oc-quick-btn oc-write-btn" data-paste="add inbound route 5551234567 to ">add inbound route [DID] to [dest]</button>
-					<button class="oc-quick-btn oc-write-btn" data-paste="call 1001 to ">call [ext] to [dest]</button>
-					<button class="oc-quick-btn oc-write-btn" data-paste="add 1001 to ringgroup ">add [ext] to ringgroup [id]</button>
-					<button class="oc-quick-btn oc-write-btn" data-paste="enable recording on ">enable recording on [ext]</button>
-					<button class="oc-quick-btn oc-write-btn" data-paste="toggle daynight ">toggle daynight [id]</button>
+					<button class="oc-quick-btn oc-write-btn" data-paste="create extension <ext> for <name>">create extension [ext] for [name]</button>
+					<button class="oc-quick-btn oc-write-btn" data-paste="forward <ext> to <number>">forward [ext] to [number]</button>
+					<button class="oc-quick-btn oc-write-btn" data-paste="enable voicemail on <ext>">enable voicemail on [ext]</button>
+					<button class="oc-quick-btn oc-write-btn" data-paste="block <number>">block [number]</button>
+					<button class="oc-quick-btn oc-write-btn" data-paste="add inbound route <DID> to <dest>">add inbound route [DID] to [dest]</button>
+					<button class="oc-quick-btn oc-write-btn" data-paste="call <ext> to <number>">call [ext] to [number]</button>
+					<button class="oc-quick-btn oc-write-btn" data-paste="add <ext> to ringgroup <grp>">add [ext] to ringgroup [grp]</button>
+					<button class="oc-quick-btn oc-write-btn" data-paste="enable recording on <ext>">enable recording on [ext]</button>
+					<button class="oc-quick-btn oc-write-btn" data-paste="toggle daynight <id>">toggle daynight [id]</button>
 					<button class="oc-quick-btn oc-write-btn" data-cmd="reload">reload</button>
 				</div>
 			</div>
@@ -110,9 +110,9 @@
 			</div>
 			<div class="oc-sidebar-header" style="margin-top: 10px;">SIP Tools</div>
 			<div class="oc-sidebar-body">
-				<button class="oc-quick-btn" data-paste="diagnose ext ">Diagnose Extension</button>
-				<button class="oc-quick-btn" data-paste="diagnose trunk ">Diagnose Trunk</button>
-				<button class="oc-quick-btn" data-paste="endpoint details ">Endpoint Details</button>
+				<button class="oc-quick-btn" data-paste="diagnose ext <ext>">Diagnose Extension</button>
+				<button class="oc-quick-btn" data-paste="diagnose trunk <id>">Diagnose Trunk</button>
+				<button class="oc-quick-btn" data-paste="endpoint details <ext>">Endpoint Details</button>
 				<button class="oc-quick-btn" data-cmd="start sip trace">Start SIP Trace</button>
 				<button class="oc-quick-btn" data-cmd="stop trace">Stop SIP Trace</button>
 				<button class="oc-quick-btn" data-cmd="trace status">Trace Status</button>
