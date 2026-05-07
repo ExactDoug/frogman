@@ -1900,6 +1900,19 @@ class ChatParser {
   `active calls` — calls in progress
   `call history <n>` — recent CDR
   `calls from <ext>`
+  `cdr stats` — call totals (today, week, month, top callers, top destinations)
+  `peak hours` — busiest hours of the day from CDR
+  `busiest extensions` / `top extensions` — extensions with most calls
+
+**Search & Export:**
+  `search <query>` / `find <query>` / `where is <query>` / `who is <query>`
+  `export <type>` — type is extensions, ringgroups, dids, trunks, cdr, or queues
+
+**Knowledge Base:**
+  `kb <query>` / `docs <query>` / `how do i <query>` / `how to <query>` — search Frogman docs
+
+**DID Map:**
+  `did map` / `inbound map` / `where do my dids go` — Mermaid flowchart of every DID's first-hop destination
 
 **Trunks:**
   `list trunks`
@@ -1929,9 +1942,10 @@ class ChatParser {
   `enable dnd on <ext>` / `disable dnd on <ext>`
   `show dnd on <ext>`
 
-**Blacklist:**
-  `list blacklist`
+**Blacklist & Allowlist:**
+  `list blacklist` / `list allowlist`
   `block <number>` / `unblock <number>`
+  `allow <number>` / `unallow <number>` — manage allowlist
 
 **Time Conditions & Day/Night:**
   `list time conditions`
@@ -1960,15 +1974,18 @@ class ChatParser {
   `list feature codes`
 
 **System:**
-  `reload` / `list modules` (summary; click a license bucket to drill in)
+  `reload` / `need reload` / `check reload`
+  `list modules` (summary; click a license bucket to drill in)
   `list all modules` / `list modules <commercial|gpl|gpl2|gpl3|agpl|other>`
   `check for upgrades` — query online repos (~10s)
   `module status <name>`
-  `asterisk info` / `uptime`
+  `asterisk info` / `uptime` / `sys info` / `system info`
   `show sip settings` / `show firewall`
   `audit <n>`
   `repair userman` / `fix ucp logins` — restore default-group + assigned wiring for UCP login
   `repair userman <ext>` — repair just one extension
+  `reset password for <user>` — reset a User Manager password
+  `revoke token <id>` — revoke an API token
 
 **Misc Destinations:**
   `list destinations`
@@ -1985,6 +2002,7 @@ class ChatParser {
   `create failover <ext1> <ext2> <ext3> then voicemail`
   `create feature code <code> that reads back my extension`
   `remove context <name>`
+  `when someone calls <number>` — natural-language inbound route wizard
 
 **Inbound Routes:**
   `list inbound routes` / `show inbound route <DID>`
@@ -2021,6 +2039,15 @@ class ChatParser {
   `show pm2` / `show license`
   `set external ip to <ip>`
   `fwconsole ma list`
+  `update activation` / `refresh license` — refresh from Sangoma portal (Apache restarts ~10s)
+
+**Sangoma Connect (SC):**
+  `sc status` / `sangoma connect status` — preflight diagnostic (license, domain, cert, seats)
+  `sc health` / `sc check` / `sc info`
+
+**Connect / MCP setup:**
+  `connect` / `how to connect` — show MCP/API connection info for AI tools
+  `mcp config` / `setup mcp` / `api config`
 
 **Live Call Control:**
   `call <ext> to <number>` — click-to-call

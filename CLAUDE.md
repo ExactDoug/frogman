@@ -28,8 +28,9 @@ Pick the highest item that does the job. **BMO first** for any FreePBX-object ma
 1. Create `Tools/MyTool.php` extending `AbstractTool`
 2. Implement: `name()`, `description()`, `validate($params)`, `requiredPermission()`, `execute($params, $context)`
 3. The tool auto-registers — the BMO class scans `Tools/*.php` on load
-4. Test via: `fwconsole frogman:tool my_tool_name '{"param":"value"}'`
-5. It will automatically appear in the HTTP catalog and MCP server
+4. If the tool needs chat-routing, add a `preg_match` anchor in `ChatParser::parse()` AND add the canonical bracket-placeholder form to `ChatParser::helpText()` (e.g. `\`forward <ext> to <number>\``) so the typeahead picks it up automatically. Run `fwconsole frogman:tool fm_lint_typeahead '{}'` to confirm there are no parser↔typeahead gaps.
+5. Test via: `fwconsole frogman:tool my_tool_name '{"param":"value"}'`
+6. It will automatically appear in the HTTP catalog and MCP server
 
 ### Tool naming — brand/vendor scope must be explicit
 
