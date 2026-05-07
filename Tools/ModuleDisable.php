@@ -17,10 +17,8 @@ class ModuleDisable extends AbstractTool {
 		if (!$confirm) {
 			return ['dry_run' => true, 'message' => "Would disable module {$name}. Reply yes to confirm."];
 		}
-		$output = []; $exitCode = 0;
-		exec("/usr/sbin/fwconsole ma disable " . escapeshellarg($name) . " 2>&1", $output, $exitCode);
-		$out = implode("\n", $output);
-		if ($exitCode !== 0) throw new \Exception("Disable failed: {$out}");
-		return ['dry_run' => false, 'message' => "Module {$name} disabled", 'output' => $out, 'needs_reload' => true];
+		$r = $this->runFwconsole(['ma', 'disable', $name]);
+		if ($r['exit_code'] !== 0) throw new \Exception("Disable failed: " . $r['output']);
+		return ['dry_run' => false, 'message' => "Module {$name} disabled", 'output' => $r['output'], 'needs_reload' => true];
 	}
 }

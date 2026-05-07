@@ -28,11 +28,7 @@ class FwconsoleCmd extends AbstractTool {
 		if (!$readOnly && !$confirm) {
 			return ['dry_run' => true, 'message' => "Would run: fwconsole {$args}."];
 		}
-		$output = []; $exitCode = 0;
-		// Escape each argument individually
-		$parts = preg_split('/\s+/', $args);
-		$escaped = implode(' ', array_map('escapeshellarg', $parts));
-		exec('/usr/sbin/fwconsole ' . $escaped . ' 2>&1', $output, $exitCode);
-		return ['command' => "fwconsole {$args}", 'exit_code' => $exitCode, 'output' => implode("\n", $output)];
+		$r = $this->runFwconsole($args);
+		return ['command' => "fwconsole {$args}", 'exit_code' => $r['exit_code'], 'output' => $r['output']];
 	}
 }

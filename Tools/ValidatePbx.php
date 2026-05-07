@@ -10,9 +10,7 @@ class ValidatePbx extends AbstractTool {
 	public function execute($params, $context) {
 		// Validate needs a pseudo-TTY via script wrapper
 		if (!$this->canSudo()) return ['needs_root' => true, 'message' => 'This command requires root access.'];
-		$output = [];
-		exec('sudo script -qc "/usr/sbin/fwconsole validate --no-interaction --no-ansi 2>&1" /dev/null', $output, $ec);
-		$result = ['output' => preg_replace('/\x1B\[[0-9;]*[a-zA-Z]/', '', implode("\n", $output)), 'exit_code' => $ec];
+		$result = $this->runFwconsole('validate --no-interaction', ['sudo' => true, 'tty' => true, 'no_ansi' => true]);
 		if (!empty($result['needs_root'])) return $result;
 
 		$raw = $result['output'];

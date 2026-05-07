@@ -59,21 +59,15 @@ class BackupCreate extends AbstractTool {
 			];
 		}
 
-		// Execute backup via shell
-		$output = [];
-		$exitCode = 0;
-		$cmd = '/usr/sbin/fwconsole backup --backup=' . escapeshellarg($backupId) . ' 2>&1';
-		exec($cmd, $output, $exitCode);
-		$outputStr = implode("\n", $output);
-
-		if ($exitCode !== 0) {
-			throw new \Exception("Backup failed (exit code {$exitCode}): {$outputStr}");
+		$r = $this->runFwconsole(['backup', '--backup=' . $backupId]);
+		if ($r['exit_code'] !== 0) {
+			throw new \Exception("Backup failed (exit code {$r['exit_code']}): {$r['output']}");
 		}
 
 		return [
 			'dry_run' => false,
 			'message' => "Backup {$backupId} completed",
-			'output' => $outputStr,
+			'output' => $r['output'],
 		];
 	}
 }

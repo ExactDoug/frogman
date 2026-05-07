@@ -30,12 +30,11 @@ class UpdateActivation extends AbstractTool {
 		// regen + apache restart). Apache restart kills the current request from
 		// the web chat, so background it. CLI invocations are unaffected either way.
 		$logFile = '/tmp/frogman-activation-' . time() . '.log';
-		$cmd = sprintf(
-			'nohup sudo /usr/sbin/fwconsole sa activate %s > %s 2>&1 < /dev/null &',
-			escapeshellarg($depid),
-			escapeshellarg($logFile)
-		);
-		shell_exec($cmd);
+		$this->runFwconsole(['sa', 'activate', $depid], [
+			'sudo' => true,
+			'background' => true,
+			'log_file' => $logFile,
+		]);
 
 		return [
 			'message' => "Activation refresh started in the background. Apache will restart in ~10s; the new license takes effect once it returns. Re-check with `sc status` in ~15s.",

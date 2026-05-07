@@ -9,12 +9,12 @@ class CheckUpgrades extends AbstractTool {
 	public function permissionLevel() { return self::PERM_READ; }
 
 	public function execute($params, $context) {
-		$output = []; $exitCode = 0;
 		// --format=json emits one JSON object per line. The data array we want is the
 		// last line whose data field is itself an array of module rows.
-		exec('/usr/sbin/fwconsole ma listonline --format=json 2>&1', $output, $exitCode);
-		if ($exitCode !== 0) {
-			throw new \Exception("Online check failed: " . implode("\n", $output));
+		$r = $this->runFwconsole('ma listonline --format=json');
+		$output = explode("\n", $r['output']);
+		if ($r['exit_code'] !== 0) {
+			throw new \Exception("Online check failed: " . $r['output']);
 		}
 
 		$rows = [];

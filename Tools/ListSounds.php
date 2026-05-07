@@ -7,7 +7,7 @@ class ListSounds extends AbstractTool {
 	public function description() { return 'List installed sound/language packs.'; }
 	public function validate($params) { return true; }
 	public function execute($params, $context) {
-		$output = []; exec('/usr/sbin/fwconsole sounds --list 2>&1', $output, $ec);
-		return ['output' => implode("\n", $output)];
+		$r = $this->runFwconsole('sounds --list');
+		return ['output' => $r['output']];
 	}
 }

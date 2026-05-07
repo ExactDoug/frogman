@@ -17,39 +17,35 @@ class ModuleInstall extends AbstractTool {
 		if (!$confirm) {
 			return ['dry_run' => true, 'message' => "Would install module {$name} (auto-downloads from repo if needed). Reply yes to confirm."];
 		}
-		$arg = escapeshellarg($name);
 		$transcript = [];
 		$downloaded = false;
 
 		$installFailRe = '/Unable to install module|Cannot find module|not locally (?:available|installed)|module not found|no such module/i';
 		$installOkRe = '/is already installed|nothing to install/i';
 
-		$output = []; $exitCode = 0;
-		exec("/usr/sbin/fwconsole ma install {$arg} 2>&1", $output, $exitCode);
-		$out = implode("\n", $output);
+		$r = $this->runFwconsole(['ma', 'install', $name]);
+		$out = $r['output'];
 		$transcript[] = "$ fwconsole ma install {$name}";
 		$transcript[] = $out;
 
-		$failed = ($exitCode !== 0) || (preg_match($installFailRe, $out) && !preg_match($installOkRe, $out));
+		$failed = ($r['exit_code'] !== 0) || (preg_match($installFailRe, $out) && !preg_match($installOkRe, $out));
 
 		if ($failed) {
-			$dlOut = []; $dlExit = 0;
-			exec("/usr/sbin/fwconsole ma download {$arg} 2>&1", $dlOut, $dlExit);
-			$dlStr = implode("\n", $dlOut);
+			$dl = $this->runFwconsole(['ma', 'download', $name]);
+			$dlStr = $dl['output'];
 			$transcript[] = "$ fwconsole ma download {$name}";
 			$transcript[] = $dlStr;
-			$dlFailed = ($dlExit !== 0) || preg_match('/Cannot find|not found|Unknown error|Error\(s\) downloading/i', $dlStr);
+			$dlFailed = ($dl['exit_code'] !== 0) || preg_match('/Cannot find|not found|Unknown error|Error\(s\) downloading/i', $dlStr);
 			if ($dlFailed) {
 				throw new \Exception("Module `{$name}` not found in any configured repo (standard, commercial, unsupported).\n\n" . implode("\n", $transcript));
 			}
 			$downloaded = true;
 
-			$output = []; $exitCode = 0;
-			exec("/usr/sbin/fwconsole ma install {$arg} 2>&1", $output, $exitCode);
-			$out = implode("\n", $output);
+			$r = $this->runFwconsole(['ma', 'install', $name]);
+			$out = $r['output'];
 			$transcript[] = "$ fwconsole ma install {$name}";
 			$transcript[] = $out;
-			$failed = ($exitCode !== 0) || (preg_match($installFailRe, $out) && !preg_match($installOkRe, $out));
+			$failed = ($r['exit_code'] !== 0) || (preg_match($installFailRe, $out) && !preg_match($installOkRe, $out));
 		}
 
 		if ($failed) {

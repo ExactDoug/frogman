@@ -17,10 +17,8 @@ class ModuleUninstall extends AbstractTool {
 		if (!$confirm) {
 			return ['dry_run' => true, 'message' => "Would uninstall module {$name}. Reply yes to confirm."];
 		}
-		$output = []; $exitCode = 0;
-		exec("/usr/sbin/fwconsole ma uninstall " . escapeshellarg($name) . " 2>&1", $output, $exitCode);
-		$out = implode("\n", $output);
-		if ($exitCode !== 0) throw new \Exception("Uninstall failed: {$out}");
-		return ['dry_run' => false, 'message' => "Module {$name} uninstalled", 'output' => $out, 'needs_reload' => true];
+		$r = $this->runFwconsole(['ma', 'uninstall', $name]);
+		if ($r['exit_code'] !== 0) throw new \Exception("Uninstall failed: " . $r['output']);
+		return ['dry_run' => false, 'message' => "Module {$name} uninstalled", 'output' => $r['output'], 'needs_reload' => true];
 	}
 }

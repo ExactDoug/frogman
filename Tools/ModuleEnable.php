@@ -17,10 +17,8 @@ class ModuleEnable extends AbstractTool {
 		if (!$confirm) {
 			return ['dry_run' => true, 'message' => "Would enable module {$name}. Reply yes to confirm."];
 		}
-		$output = []; $exitCode = 0;
-		exec("/usr/sbin/fwconsole ma enable " . escapeshellarg($name) . " 2>&1", $output, $exitCode);
-		$out = implode("\n", $output);
-		if ($exitCode !== 0) throw new \Exception("Enable failed: {$out}");
-		return ['dry_run' => false, 'message' => "Module {$name} enabled", 'output' => $out, 'needs_reload' => true];
+		$r = $this->runFwconsole(['ma', 'enable', $name]);
+		if ($r['exit_code'] !== 0) throw new \Exception("Enable failed: " . $r['output']);
+		return ['dry_run' => false, 'message' => "Module {$name} enabled", 'output' => $r['output'], 'needs_reload' => true];
 	}
 }

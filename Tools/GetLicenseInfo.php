@@ -8,8 +8,8 @@ class GetLicenseInfo extends AbstractTool {
 	public function validate($params) { return true; }
 	public function requiredPermission() { return null; }
 	public function execute($params, $context) {
-		$output = []; $exitCode = 0;
-		exec('script -qc "/usr/sbin/fwconsole sa info --no-ansi 2>&1" /dev/null', $output, $exitCode);
+		$r = $this->runFwconsole('sa info', ['tty' => true, 'no_ansi' => true]);
+		$output = explode("\n", $r['output']);
 
 		// Parse activation info
 		$activation = [];

@@ -18,16 +18,16 @@ class ModuleUpgrade extends AbstractTool {
 			$label = ($name === 'all') ? 'all modules' : "module `{$name}`";
 			return ['dry_run' => true, 'message' => "Would upgrade {$label}. This may take a few minutes."];
 		}
-		$cmd = ($name === 'all') ? '/usr/sbin/fwconsole ma upgradeall 2>&1' : '/usr/sbin/fwconsole ma upgrade ' . escapeshellarg($name) . ' 2>&1';
-		$output = []; $exitCode = 0;
-		exec($cmd, $output, $exitCode);
-		$out = implode("\n", $output);
+		$r = ($name === 'all')
+			? $this->runFwconsole('ma upgradeall')
+			: $this->runFwconsole(['ma', 'upgrade', $name]);
+		$out = $r['output'];
 
 		// fwconsole sometimes exits 0 for hard errors (unknown module, missing locally) — catch those.
 		if (preg_match('/is not a locally installed module|module not found/i', $out)) {
 			throw new \Exception("Upgrade failed: {$out}");
 		}
-		if ($exitCode !== 0) {
+		if ($r['exit_code'] !== 0) {
 			throw new \Exception("Upgrade failed: {$out}");
 		}
 

@@ -38,12 +38,63 @@ abstract class AbstractTool {
 	}
 
 	/**
-	 * Check if sudo is available for fwconsole.
-	 * Returns true if available, false if not.
+	 * Run a fwconsole command. Centralized wrapper so any FreePBX-side change to the
+	 * binary path or argv shape is patched in one place. Tools should call this rather
+	 * than reaching for exec() directly, so we stay within the FreePBX walls.
+	 *
+	 * @param string|array $args String form is split on whitespace ("ma install tts");
+	 *                           array form passes each token as-is.
+	 * @param array $opts        'sudo'       prepend sudo (full)
+	 *                           'sudo_check' prepend `sudo -n` (non-interactive probe)
+	 *                           'tty'        wrap in `script -qc` for subcommands that
+	 *                                        require a TTY (e.g. sa info, validate)
+	 *                           'no_ansi'    append --no-ansi to args
+	 *                           'background' fire-and-forget via nohup; returns
+	 *                                        ['output' => '', 'exit_code' => 0] immediately
+	 *                           'log_file'   when 'background' is set, redirect to this
+	 *                                        file instead of /dev/null (caller can tail it)
+	 * @return array             ['output' => string (ANSI stripped, trimmed),
+	 *                            'exit_code' => int]
+	 */
+	protected function runFwconsole($args, array $opts = []) {
+		$parts = is_array($args) ? $args : preg_split('/\s+/', trim((string)$args));
+		$parts = array_values(array_filter($parts, function($p) { return $p !== ''; }));
+		if (!empty($opts['no_ansi'])) {
+			$parts[] = '--no-ansi';
+		}
+		$escaped = implode(' ', array_map('escapeshellarg', $parts));
+		$cmd = '/usr/sbin/fwconsole ' . $escaped;
+		if (!empty($opts['tty'])) {
+			// `script` simulates a TTY for fwconsole subcommands that detect non-TTY
+			// and either refuse to run or emit different output.
+			$cmd = 'script -qc ' . escapeshellarg($cmd . ' 2>&1') . ' /dev/null';
+		} else {
+			$cmd .= ' 2>&1';
+		}
+		if (!empty($opts['sudo_check'])) {
+			$cmd = 'sudo -n ' . $cmd;
+		} elseif (!empty($opts['sudo'])) {
+			$cmd = 'sudo ' . $cmd;
+		}
+		if (!empty($opts['background'])) {
+			$dest = !empty($opts['log_file']) ? escapeshellarg($opts['log_file']) : '/dev/null';
+			exec('nohup ' . $cmd . ' > ' . $dest . ' 2>&1 < /dev/null &');
+			return ['output' => '', 'exit_code' => 0];
+		}
+		$output = []; $exitCode = 0;
+		exec($cmd, $output, $exitCode);
+		$raw = implode("\n", $output);
+		$raw = preg_replace('/\x1B\[[0-9;]*[a-zA-Z]/', '', $raw);
+		return ['output' => trim($raw), 'exit_code' => $exitCode];
+	}
+
+	/**
+	 * Check if sudo is available for fwconsole. Returns true when sudoers is wired up
+	 * (NOPASSWD for asterisk user) so commands like reload/restart can run elevated.
 	 */
 	protected function canSudo() {
-		exec('sudo -n /usr/sbin/fwconsole --version 2>&1', $out, $ec);
-		return $ec === 0;
+		$r = $this->runFwconsole('--version', ['sudo_check' => true]);
+		return $r['exit_code'] === 0;
 	}
 
 	/**
@@ -123,12 +174,13 @@ abstract class AbstractTool {
 	}
 
 	/**
-	 * Run a fwconsole command with sudo if available.
-	 * Returns ['output' => string, 'exit_code' => int] or the root-required message.
+	 * Run a fwconsole command as root. Thin wrapper over runFwconsole() that adds the
+	 * dry-run gate and the sudoers preflight. Existing callers (Reload, Restart, etc.)
+	 * use the dry-run-returns-null contract; preserve it.
 	 */
 	protected function runAsRoot($cmd, $confirm = true) {
 		if (!$confirm) {
-			return null; // dry-run, don't check yet
+			return null;
 		}
 		if (!$this->canSudo()) {
 			return [
@@ -136,12 +188,6 @@ abstract class AbstractTool {
 				'message' => "This command requires root access.",
 			];
 		}
-		$output = [];
-		$ec = 0;
-		exec("sudo /usr/sbin/fwconsole {$cmd} 2>&1", $output, $ec);
-		$raw = implode("\n", $output);
-		// Strip ANSI codes
-		$raw = preg_replace('/\x1B\[[0-9;]*[a-zA-Z]/', '', $raw);
-		return ['output' => trim($raw), 'exit_code' => $ec];
+		return $this->runFwconsole($cmd, ['sudo' => true]);
 	}
 }

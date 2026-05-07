@@ -7,7 +7,7 @@ class GetExternalIp extends AbstractTool {
 	public function description() { return 'Get the external/public IP address of this PBX.'; }
 	public function validate($params) { return true; }
 	public function execute($params, $context) {
-		$output = []; exec('/usr/sbin/fwconsole extip 2>&1', $output, $ec);
-		return ['output' => implode("\n", $output)];
+		$r = $this->runFwconsole('extip');
+		return ['output' => $r['output']];
 	}
 }
