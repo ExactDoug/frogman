@@ -1394,6 +1394,31 @@ class ChatParser {
 			self::setPending($sessionId, 'fm_reboot_sangoma_phone', $params);
 			return ['tool' => 'fm_reboot_sangoma_phone', 'params' => $params];
 		}
+		// ── Sangoma Multicast / Emergency Alerts ──
+		if (preg_match('/^(?:list|show)\s+(?:sangoma\s+)?(?:multicast|emergency|paging)\s+zones?$/i', $lower)) {
+			return ['tool' => 'fm_list_sangoma_multicast_zones', 'params' => []];
+		}
+		// "emergency alert <recording> on zone <zone>"  /  "emergency alert <recording>"
+		if (preg_match('/^(?:emergency\s+alert|alert)\s+(.+?)\s+on\s+zone\s+(\S+)$/i', $msg, $m)) {
+			$params = ['recording' => trim($m[1]), 'zone' => trim($m[2])];
+			self::setPending($sessionId, 'fm_sangoma_emergency_alert', $params);
+			return ['tool' => 'fm_sangoma_emergency_alert', 'params' => $params];
+		}
+		if (preg_match('/^(?:emergency\s+alert|alert)\s+(.+)$/i', $msg, $m)) {
+			$params = ['recording' => trim($m[1])];
+			self::setPending($sessionId, 'fm_sangoma_emergency_alert', $params);
+			return ['tool' => 'fm_sangoma_emergency_alert', 'params' => $params];
+		}
+		// "lockdown <recording>" — shorthand for the LOCKDOWN zone
+		if (preg_match('/^lockdown\s+(.+)$/i', $msg, $m)) {
+			$params = ['recording' => trim($m[1]), 'zone' => 'LOCKDOWN'];
+			self::setPending($sessionId, 'fm_sangoma_emergency_alert', $params);
+			return ['tool' => 'fm_sangoma_emergency_alert', 'params' => $params];
+		}
+		// Bare "emergency alert" / "lockdown" with no recording → tool returns the helpful error
+		if (preg_match('/^(?:emergency\s+alert|lockdown)$/i', $lower)) {
+			return ['tool' => 'fm_sangoma_emergency_alert', 'params' => []];
+		}
 		if (preg_match('/^diagnose\s+(ext(ension)?)\s+(\d+)$/i', $msg, $m)) {
 			return ['tool' => 'fm_diagnose_extension', 'params' => ['ext' => $m[3]]];
 		}
@@ -2087,6 +2112,12 @@ class ChatParser {
   `dpma alerts` / `sangoma alerts <ext>` — phone-side issues DPMA has flagged
   `dpma license` — license usage and headroom
   `reboot sangoma <ext>` — reboot a Sangoma phone (~30s downtime, requires confirm)
+
+**Emergency Multicast Alerts:** (Sangoma/DPMA phones, zones created in EPM)
+  `list multicast zones` — show configured EPM multicast paging zones
+  `emergency alert <recording>` — broadcast a System Recording to the LOCKDOWN zone
+  `emergency alert <recording> on zone <zone>` — broadcast to a specific zone
+  `lockdown <recording>` — shorthand for the LOCKDOWN zone
   `sip channels` — show active SIP channels
   `sip channels for <ext>` — filtered by endpoint
   `start sip trace` / `start trace <duration>` — capture SIP traffic (admin, max 30s)

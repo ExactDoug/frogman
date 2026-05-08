@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Frogman — Emergency Multicast Alert Overview</title>
+<style>
+:root {
+  --bg: #f4f6f7;
+  --panel: #fff;
+  --ink: #1a2e2d;
+  --muted: #6b7c7b;
+  --primary: #0f5a59;
+  --accent: #009d9d;
+  --pass: #2e7d32;
+  --fail: #c62828;
+  --warn: #e65100;
+  --border: #d6dedc;
+  --code-bg: #1a2e2d;
+  --code-ink: #b8e6e4;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.55; }
+header { background: var(--primary); color: #fff; padding: 20px 28px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+header h1 { margin: 0 0 4px 0; font-size: 24px; }
+header .sub { font-size: 14px; opacity: 0.85; }
+.layout { display: grid; grid-template-columns: 220px 1fr; gap: 28px; padding: 28px; max-width: 1180px; margin: 0 auto; }
+nav.toc { position: sticky; top: 28px; align-self: start; padding: 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+nav.toc ul { list-style: none; padding: 0; margin: 0; }
+nav.toc li { margin: 6px 0; }
+nav.toc a { color: var(--primary); text-decoration: none; }
+nav.toc a:hover { text-decoration: underline; }
+main { min-width: 0; }
+section { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 20px 24px; margin-bottom: 20px; }
+section h2 { margin: 0 0 12px 0; color: var(--primary); font-size: 19px; border-bottom: 2px solid var(--accent); padding-bottom: 6px; }
+section h3 { margin: 18px 0 8px 0; color: var(--ink); font-size: 15px; }
+p { margin: 8px 0; }
+code { background: var(--code-bg); color: var(--code-ink); padding: 2px 6px; border-radius: 3px; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
+pre { background: var(--code-bg); color: var(--code-ink); padding: 12px 14px; border-radius: 5px; overflow-x: auto; font-size: 13px; line-height: 1.45; margin: 10px 0; }
+pre code { background: none; padding: 0; }
+.banner { padding: 14px 18px; border-radius: 6px; margin-bottom: 20px; font-weight: 500; }
+.banner.warn { background: #fff3e0; border-left: 4px solid var(--warn); color: #b54a00; }
+.banner.info { background: #e0f7f5; border-left: 4px solid var(--accent); color: var(--primary); }
+.banner.fail { background: #ffebee; border-left: 4px solid var(--fail); color: #b71c1c; }
+table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+th { background: #eaf2f1; color: var(--primary); font-weight: 600; }
+td.ok { color: var(--pass); font-weight: 600; }
+td.gray { color: var(--warn); font-weight: 600; }
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 14px; background: #eaf2f1; border-radius: 6px; margin: 12px 0; font-size: 13px; }
+.flow .step { background: var(--panel); border: 1px solid var(--accent); border-radius: 5px; padding: 6px 10px; }
+.flow .step.dest { background: var(--accent); color: #fff; border-color: var(--accent); }
+.flow .arrow { color: var(--primary); font-weight: 700; font-size: 16px; }
+.callout { padding: 12px 16px; background: #f0faf9; border-left: 3px solid var(--accent); border-radius: 0 4px 4px 0; margin: 12px 0; font-size: 14px; }
+.kv { display: grid; grid-template-columns: 180px 1fr; gap: 4px 12px; margin: 8px 0; font-size: 13px; }
+.kv .k { color: var(--muted); font-weight: 600; }
+.kv .v { color: var(--ink); }
+.kv .v code { font-size: 12px; }
+ul.checks { padding-left: 20px; }
+ul.checks li { margin: 4px 0; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; vertical-align: middle; }
+.tag.lan { background: #e0f7f5; color: var(--primary); }
+.tag.wall { background: #e8f5e9; color: var(--pass); }
+.tag.gray { background: #fff3e0; color: var(--warn); }
+.tag.ami { background: #e3f2fd; color: #1565c0; }
+.tag.bmo { background: #f3e5f5; color: #6a1b9a; }
+hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Emergency Multicast Alert</h1>
+  <div class="sub">Frogman tool: <code style="background: rgba(255,255,255,0.15); color: #fff;">fm_sangoma_emergency_alert</code> &middot; Sangoma / DPMA / P-Series</div>
+</header>
+
+<div class="layout">
+  <nav class="toc">
+    <ul>
+      <li><a href="#summary">Summary</a></li>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#lan">Why LAN-only</a></li>
+      <li><a href="#setup">One-time setup</a></li>
+      <li><a href="#commands">Commands</a></li>
+      <li><a href="#walls">In-walls routing</a></li>
+      <li><a href="#troubleshoot">Troubleshooting</a></li>
+      <li><a href="#future">Limitations &amp; next</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <div class="banner warn">
+      <strong>LAN-only feature.</strong> Multicast paging requires PBX and phones to share an L2 broadcast domain. It will not cross the public internet, will not survive NAT, and most ISPs do not route multicast at all. The cloud dev box (<code>144.202.20.53</code>) cannot deliver multicast to phones at <code>198.109.107.67</code> &mdash; this is a network reality, not a code bug.
+    </div>
+
+    <section id="summary">
+      <h2>Summary</h2>
+      <p>One Frogman command broadcasts a pre-recorded message to every Sangoma / DPMA P-Series phone listening on a named multicast paging zone. Phones auto-answer and play the recording at full volume regardless of state (idle, on-call &mdash; via interrupt level). Designed for K-12 lockdown / shelter-in-place / fire announcements where SIP unicast paging cannot scale.</p>
+      <div class="kv">
+        <div class="k">Tool</div><div class="v"><code>fm_sangoma_emergency_alert</code></div>
+        <div class="k">Permission</div><div class="v">write (requires <code>confirm: true</code>)</div>
+        <div class="k">Trigger surfaces</div><div class="v">CLI, HTTP API, MCP, chat parser, GraphQL</div>
+        <div class="k">Replaced</div><div class="v"><code>PushLockdown.php</code> + <code>PushSangomaZone.php</code> (orphans removed; had flite/sox shell-outs)</div>
+        <div class="k">Status</div><div class="v">Built, in-walls verified, send-leg verified on dev box. End-to-end audio requires LAN test.</div>
+      </div>
+    </section>
+
+    <section id="how">
+      <h2>How it works</h2>
+      <h3>Architecture flow</h3>
+      <div class="flow">
+        <span class="step">Chat / CLI / MCP</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">Frogman tool</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">Recordings BMO + endpoint_multicast</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">AMI Originate</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">Asterisk MulticastRTP</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">LAN multicast (239.x.x.x)</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step dest">P-Series phones</span>
+      </div>
+
+      <h3>What the tool does, step by step</h3>
+      <ol>
+        <li><strong>Resolve recording.</strong> Accepts a System Recording <em>id</em> or <em>display name</em>. Looks it up via <code>\FreePBX::Recordings()-&gt;getAllRecordings()</code> and pulls the filename (e.g. <code>custom/ldown</code>).</li>
+        <li><strong>Resolve zone.</strong> Reads the named zone from the EPM <code>endpoint_multicast</code> table. Defaults to <code>LOCKDOWN</code>. Returns the IP, port, codec, priority, and interrupt level.</li>
+        <li><strong>Dry-run preview.</strong> Without <code>confirm: true</code>, returns a structured preview showing exactly what would happen.</li>
+        <li><strong>Fire.</strong> With <code>confirm: true</code>, issues an AMI <code>Originate</code>:
+          <pre><code>Channel: MulticastRTP/basic/&lt;ip&gt;:&lt;port&gt;
+Application: Playback
+Data: &lt;recording filename&gt;
+Async: true</code></pre>
+        </li>
+        <li><strong>Asterisk emits the RTP stream</strong> to the configured multicast group. P-Series phones whose DPMA-provisioned config subscribes them to that group auto-join the IGMP group on boot, hear the stream, and play it.</li>
+      </ol>
+
+      <h3>Where the parts live</h3>
+      <table>
+        <tr><th>Piece</th><th>Lives in</th><th>Managed by</th></tr>
+        <tr><td>Multicast zones (IP/port/codec)</td><td><code>endpoint_multicast</code> DB table</td><td>Human, via FreePBX EPM GUI</td></tr>
+        <tr><td>Phone subscription (which zones to listen on)</td><td><code>/etc/asterisk/dpma/phone_configs/&lt;ext&gt;-1/&lt;MAC&gt;.cfg</code></td><td>EPM template &rarr; DPMA, on rebuild</td></tr>
+        <tr><td>System recordings</td><td><code>recordings</code> DB table + <code>/var/lib/asterisk/sounds/&lt;lang&gt;/custom/</code></td><td>Human, via FreePBX System Recordings GUI</td></tr>
+        <tr><td>Send channel driver</td><td><code>chan_multicast_rtp</code> (built into Asterisk)</td><td>Asterisk core</td></tr>
+        <tr><td>Frogman tool</td><td><code>Tools/SangomaEmergencyAlert.php</code></td><td>Frogman</td></tr>
+      </table>
+    </section>
+
+    <section id="lan">
+      <h2>Why LAN-only</h2>
+      <p>Multicast (224.0.0.0/4) is a network-layer feature designed for one-to-many delivery on a shared broadcast domain. Three independent reasons it cannot work over a WAN / cloud setup:</p>
+      <ul>
+        <li><strong>ISPs do not route multicast.</strong> Default consumer and cloud-provider routing tables drop 239.x.x.x packets. Multicast routing (PIM, MSDP) requires explicit configuration that no commercial ISP offers to standard customers.</li>
+        <li><strong>Multicast does not survive NAT.</strong> The 1:N delivery model has no concept of source/destination port translation. Carrier-grade NAT, home routers, and SBCs all drop or fail to forward multicast.</li>
+        <li><strong>Phones must be in the same IGMP-aware L2 segment.</strong> A managed switch with IGMP snooping forwards multicast to subscribed ports; without that, the multicast group either floods or is silently dropped depending on the switch.</li>
+      </ul>
+      <div class="callout">
+        <strong>What this means for K-12 deployment:</strong> the natural fit. Schools run an on-prem PBX or an on-campus FreePBX appliance, and the phones are on the same campus LAN (often VLANed by classroom). Multicast paging works perfectly in that topology.
+      </div>
+      <div class="callout">
+        <strong>What this means for cloud-hosted PBX with remote phones:</strong> multicast paging is not viable. SIP unicast paging (the standard <code>\FreePBX::Paging()</code> module) is the only option, and it caps out around tens of phones before SIP fanout overhead becomes painful.
+      </div>
+    </section>
+
+    <section id="setup">
+      <h2>One-time setup (human, via FreePBX GUI)</h2>
+      <p>Frogman cannot create multicast zones &mdash; there is no public BMO setter and CLAUDE.md rule 3 forbids writing to other modules' tables. This is a single-step setup per zone, done once per template.</p>
+      <ol>
+        <li>FreePBX admin &rarr; <strong>Connectivity</strong> &rarr; <strong>Endpoint Manager</strong></li>
+        <li>Open the relevant template (e.g. <code>digium_default</code> for Sangoma P-Series)</li>
+        <li><strong>Multicast tab</strong> &rarr; <strong>Add Zone</strong></li>
+        <li>Recommended values for <code>LOCKDOWN</code>:
+          <div class="kv">
+            <div class="k">Name</div><div class="v"><code>LOCKDOWN</code></div>
+            <div class="k">IP address</div><div class="v"><code>239.255.0.1</code> (site-local multicast range)</div>
+            <div class="k">Port</div><div class="v"><code>10000</code></div>
+            <div class="k">Codec</div><div class="v"><code>PCMU</code> (G.711 &micro;-law &mdash; universally supported)</div>
+            <div class="k">Priority</div><div class="v"><code>1</code></div>
+            <div class="k">Interrupt level</div><div class="v"><code>2</code> (interrupts active calls)</div>
+          </div>
+        </li>
+        <li><strong>Save</strong>, then <strong>Rebuild Configs</strong></li>
+        <li>Phones reload on next DPMA poll, or run <code>asterisk -rx "digium_phones reconfigure phone &lt;ext&gt;-1"</code> to force immediately</li>
+        <li>Optionally add additional zones: <code>FIRE</code> (239.255.0.2), <code>SHELTER</code> (239.255.0.3), <code>ALL_CLEAR</code> (239.255.0.4) on subsequent ports</li>
+      </ol>
+      <p>Then create your System Recording: <strong>Admin</strong> &rarr; <strong>System Recordings</strong> &rarr; <strong>Add Recording</strong>. Record a short clear message (8&ndash;15 seconds typical for a lockdown announcement).</p>
+    </section>
+
+    <section id="commands">
+      <h2>Commands</h2>
+
+      <h3>Chat (preferred)</h3>
+      <pre><code>list multicast zones
+emergency alert &lt;recording&gt;
+emergency alert &lt;recording&gt; on zone &lt;zone&gt;
+lockdown &lt;recording&gt;</code></pre>
+
+      <h3>CLI</h3>
+      <pre><code># list zones
+fwconsole frogman:tool fm_list_sangoma_multicast_zones '{}'
+
+# dry run (preview)
+fwconsole frogman:tool fm_sangoma_emergency_alert '{"recording":"Lockdown"}'
+
+# fire (with confirm)
+fwconsole frogman:tool fm_sangoma_emergency_alert '{"recording":"Lockdown","confirm":true}'
+
+# fire to a non-default zone
+fwconsole frogman:tool fm_sangoma_emergency_alert \
+  '{"recording":"Fire Alarm","zone":"FIRE","confirm":true}'</code></pre>
+
+      <h3>HTTP / MCP</h3>
+      <p>Tool auto-registers in the Frogman HTTP catalog and MCP server &mdash; same parameter shape as the CLI invocations above.</p>
+
+      <h3>Diagnostic CLI (Asterisk)</h3>
+      <pre><code># confirm channel driver loaded
+asterisk -rx "core show channeltypes" | grep MulticastRTP
+
+# verify what DPMA wrote to a phone's config
+grep -A2 multicastpage /etc/asterisk/dpma/phone_configs/101-1/*.cfg
+
+# force a phone to reload its config
+asterisk -rx "digium_phones reconfigure phone 101-1"
+
+# direct-fire test (bypasses Frogman, uses stock sound)
+asterisk -rx "channel originate MulticastRTP/basic/239.255.0.1:10000 \
+  application Playback demo-congrats"</code></pre>
+    </section>
+
+    <section id="walls">
+      <h2>In-walls routing analysis</h2>
+      <p>CLAUDE.md hierarchy: BMO &rarr; AMI &rarr; GraphQL &rarr; direct DB read. Each piece of this tool maps to a documented surface; no shell-outs, no <code>fwconsole</code>, no writes to another module's tables.</p>
+      <table>
+        <tr><th>Action</th><th>Surface</th><th>Rule</th></tr>
+        <tr><td>List system recordings</td><td><code>\FreePBX::Recordings()-&gt;getAllRecordings()</code></td><td><span class="tag bmo">BMO</span> Rule 1 &mdash; in walls</td></tr>
+        <tr><td>Resolve recording filename</td><td><code>\FreePBX::Recordings()-&gt;getFilenameById()</code></td><td><span class="tag bmo">BMO</span> Rule 1 &mdash; in walls</td></tr>
+        <tr><td>Originate multicast call</td><td><code>$astman-&gt;Originate(...)</code></td><td><span class="tag ami">AMI</span> Rule 2 &mdash; in walls</td></tr>
+        <tr><td>Read multicast zones</td><td><code>SELECT FROM endpoint_multicast</code></td><td><span class="tag gray">DB read</span> Rule 4 &mdash; documented exception (no BMO surface)</td></tr>
+      </table>
+      <div class="callout">
+        <strong>Why the DB read is fine.</strong> CLAUDE.md rule 3/4 explicitly allows reads of other modules' tables when no BMO method exposes the data. Recon confirmed zero PHP code in EPM touches <code>endpoint_multicast</code> &mdash; the GUI is the only writer; everything else is client-side JavaScript. Frogman never writes to this table.
+      </div>
+      <div class="callout">
+        <strong>What was removed.</strong> The previous orphan <code>PushSangomaZone.php</code> shelled out to <code>flite</code> and <code>sox</code> for TTS rendering. Both shell-outs were flagged by the wall-audit. The new tool drops TTS entirely &mdash; emergency announcements should be pre-recorded for clarity and brand consistency anyway.
+      </div>
+    </section>
+
+    <section id="troubleshoot">
+      <h2>Troubleshooting checklist</h2>
+      <p>If the dry-run preview is correct but phones stay silent, work through this list:</p>
+      <ul class="checks">
+        <li><strong>Are PBX and phones on the same LAN?</strong> Compare <code>ip -4 addr</code> on the PBX with the contact IP from <code>asterisk -rx "pjsip show contacts"</code>. If different public IPs, multicast cannot reach them. (This is the dev box state.)</li>
+        <li><strong>Is the channel driver loaded?</strong> <code>asterisk -rx "core show channeltypes" | grep MulticastRTP</code>. Should show <code>MulticastRTP &mdash; Multicast RTP Paging Channel Driver</code>.</li>
+        <li><strong>Did the channel actually go up?</strong> Right after fire, run <code>asterisk -rx "core show channels"</code>. You should see a <code>MulticastRTP/&lt;ip&gt;:&lt;port&gt;</code> channel in <code>Up</code> state running <code>Playback(...)</code>.</li>
+        <li><strong>Does the phone's config include the zone?</strong> <code>grep -A2 multicastpage /etc/asterisk/dpma/phone_configs/&lt;ext&gt;-1/*.cfg</code>. If the <code>&lt;multicastpage&gt;</code> block is empty, EPM did not push the zone &mdash; revisit the template's Multicast tab and Rebuild Configs.</li>
+        <li><strong>Has the phone reloaded since the zone was added?</strong> <code>asterisk -rx "digium_phones reconfigure phone &lt;ext&gt;-1"</code> sends an immediate reconfigure message. Without it, phones pick up the new config on next DPMA poll (minutes).</li>
+        <li><strong>Is the LAN switch IGMP-aware?</strong> Some unmanaged switches flood multicast (works but loud); some managed switches with IGMP snooping but no querier silently drop it. <code>tcpdump -i &lt;iface&gt; host 239.255.0.1</code> on the phone-side network confirms whether packets arrive.</li>
+        <li><strong>Codec mismatch?</strong> Recording must transcode to PCMU. <code>soxi /var/lib/asterisk/sounds/en/custom/&lt;file&gt;.wav</code> &mdash; 8 kHz mono works directly; higher rates transcode automatically; weird codecs may fail silently.</li>
+      </ul>
+    </section>
+
+    <section id="future">
+      <h2>Limitations &amp; next steps</h2>
+      <h3>Current limitations</h3>
+      <ul>
+        <li>LAN-only (architectural; not fixable in code).</li>
+        <li>Sangoma / DPMA P-Series only. Yealink / Polycom / Grandstream multicast subscriptions need a separate EPM template tab and are not currently exposed by this tool. Cross-brand support is a future build.</li>
+        <li>One-shot fire. No "ongoing" multicast stream, no scheduled drills, no all-clear chaining yet. Each invocation plays one recording end-to-end.</li>
+        <li>No screen takeover. Audio only. DPMA can push a "Lockdown" overlay via SIP NOTIFY but that's a separate composition layered on top &mdash; future build.</li>
+      </ul>
+      <h3>Roadmap candidates</h3>
+      <ul>
+        <li><strong>Flic2 button integration.</strong> Wireless physical panic buttons (<a href="https://flic.io/flic2" style="color: var(--primary);">flic.io/flic2</a>). Trigger <code>fm_sangoma_emergency_alert</code> via Flic Hub HTTP webhook &rarr; Frogman API token &rarr; instant lockdown without dialing. Natural fit for classroom deployment.</li>
+        <li><strong>Phone App soft-key panic button.</strong> Sangoma-only XML app pinned to a soft key on every P-Series phone. Single press, optional confirm screen, fires the same tool.</li>
+        <li><strong>Scheduled drills.</strong> Cron-style schedule using the existing Frogman scheduling surface to drive monthly fire / lockdown drills with a different "drill" recording.</li>
+        <li><strong>SIP NOTIFY screen takeover.</strong> Layer <code>PJSIPNotify</code> AMI action on top to push a lockdown screen overlay alongside the audio.</li>
+        <li><strong>All-clear chaining.</strong> A second tool <code>fm_sangoma_all_clear</code> that fires the all-clear recording on the same zone and clears any screen overlay.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+
+</body>
+</html>
