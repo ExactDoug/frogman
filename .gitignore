@@ -23,3 +23,7 @@ node_modules/
 
 # Temp files
 /tmp/
+
+# Internal review docs (audits, security reviews — not for public repo)
+docs/*-audit.md
+docs/*-internal.md

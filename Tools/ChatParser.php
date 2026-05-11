@@ -1355,13 +1355,6 @@ class ChatParser {
 			return ['tool' => 'fm_list_certificates', 'params' => []];
 		}
 
-		// ── Sangoma Connect status ──
-		if (preg_match('/^(sc|sangoma\s*connect)\s+(status|info|state|check|health|preflight)$/i', $lower)
-			|| preg_match('/^(check|show|get)\s+(sc|sangoma\s*connect)(\s+status)?$/i', $lower)) {
-			return ['tool' => 'fm_sc_status', 'params' => []];
-		}
-
-
 		// ── Filestores ──
 		if (preg_match('/^list\s+(filestore|storage)s?$/i', $lower)) {
 			return ['tool' => 'fm_list_filestores', 'params' => []];
@@ -1381,62 +1374,6 @@ class ChatParser {
 			return ['tool' => 'fm_update_activation', 'params' => []];
 		}
 
-		// ── Sangoma / DPMA ──
-		// Specific brand routes must come BEFORE generic ones so "sangoma" wins
-		// over the generic phone/extension parsers.
-		if (preg_match('/^diagnose\s+sangoma(?:\s+phone)?\s+(\d+)$/i', $msg, $m)) {
-			return ['tool' => 'fm_diagnose_sangoma_phone', 'params' => ['ext' => $m[1]]];
-		}
-		if (preg_match('/^sangoma\s+(?:diagnose|diag|check|health)\s+(\d+)$/i', $msg, $m)) {
-			return ['tool' => 'fm_diagnose_sangoma_phone', 'params' => ['ext' => $m[1]]];
-		}
-		if (preg_match('/^(?:list|show)\s+sangoma\s+phones?$/i', $lower)) {
-			return ['tool' => 'fm_list_sangoma_phones', 'params' => []];
-		}
-		if (preg_match('/^(?:show|get)\s+sangoma(?:\s+phone)?\s+(\d+)$/i', $msg, $m)) {
-			return ['tool' => 'fm_get_sangoma_phone', 'params' => ['ext' => $m[1]]];
-		}
-		if (preg_match('/^sangoma\s+phone\s+(\d+)$/i', $msg, $m)) {
-			return ['tool' => 'fm_get_sangoma_phone', 'params' => ['ext' => $m[1]]];
-		}
-		if (preg_match('/^(?:dpma|sangoma)\s+alerts?(?:\s+(?:for\s+)?(\d+))?$/i', $msg, $m)) {
-			$params = [];
-			if (!empty($m[1])) $params['ext'] = $m[1];
-			return ['tool' => 'fm_dpma_alerts', 'params' => $params];
-		}
-		if (preg_match('/^(?:dpma|sangoma)\s+licen[sc]es?(?:\s+status)?$/i', $lower)) {
-			return ['tool' => 'fm_dpma_license_status', 'params' => []];
-		}
-		if (preg_match('/^reboot\s+sangoma(?:\s+phone)?\s+(\d+)$/i', $msg, $m)) {
-			$params = ['ext' => $m[1]];
-			self::setPending($sessionId, 'fm_reboot_sangoma_phone', $params);
-			return ['tool' => 'fm_reboot_sangoma_phone', 'params' => $params];
-		}
-		// ── Sangoma Multicast / Emergency Alerts ──
-		if (preg_match('/^(?:list|show)\s+(?:sangoma\s+)?(?:multicast|emergency|paging)\s+zones?$/i', $lower)) {
-			return ['tool' => 'fm_list_sangoma_multicast_zones', 'params' => []];
-		}
-		// "emergency alert <recording> on zone <zone>"  /  "emergency alert <recording>"
-		if (preg_match('/^(?:emergency\s+alert|alert)\s+(.+?)\s+on\s+zone\s+(\S+)$/i', $msg, $m)) {
-			$params = ['recording' => trim($m[1]), 'zone' => trim($m[2])];
-			self::setPending($sessionId, 'fm_sangoma_emergency_alert', $params);
-			return ['tool' => 'fm_sangoma_emergency_alert', 'params' => $params];
-		}
-		if (preg_match('/^(?:emergency\s+alert|alert)\s+(.+)$/i', $msg, $m)) {
-			$params = ['recording' => trim($m[1])];
-			self::setPending($sessionId, 'fm_sangoma_emergency_alert', $params);
-			return ['tool' => 'fm_sangoma_emergency_alert', 'params' => $params];
-		}
-		// "lockdown <recording>" — shorthand for the LOCKDOWN zone
-		if (preg_match('/^lockdown\s+(.+)$/i', $msg, $m)) {
-			$params = ['recording' => trim($m[1]), 'zone' => 'LOCKDOWN'];
-			self::setPending($sessionId, 'fm_sangoma_emergency_alert', $params);
-			return ['tool' => 'fm_sangoma_emergency_alert', 'params' => $params];
-		}
-		// Bare "emergency alert" / "lockdown" with no recording → tool returns the helpful error
-		if (preg_match('/^(?:emergency\s+alert|lockdown)$/i', $lower)) {
-			return ['tool' => 'fm_sangoma_emergency_alert', 'params' => []];
-		}
 		if (preg_match('/^diagnose\s+(ext(ension)?)\s+(\d+)$/i', $msg, $m)) {
 			return ['tool' => 'fm_diagnose_extension', 'params' => ['ext' => $m[3]]];
 		}
@@ -2088,10 +2025,6 @@ class ChatParser {
   `fwconsole ma list`
   `update activation` / `refresh license` — refresh from Sangoma portal (Apache restarts ~10s)
 
-**Sangoma Connect (SC):**
-  `sc status` / `sangoma connect status` — preflight diagnostic (license, domain, cert, seats)
-  `sc health` / `sc check` / `sc info`
-
 **Connect / MCP setup:**
   `connect` / `how to connect` — show MCP/API connection info for AI tools
   `mcp config` / `setup mcp` / `api config`
@@ -2127,19 +2060,7 @@ class ChatParser {
   `diagnose trunk <id>` — trunk diagnostic (registration, qualify, routes, CDR)
   `endpoint details <ext>` — deep PJSIP endpoint info (codecs, transport, auth)
 
-**Sangoma / DPMA Phones:** (Sangoma-branded phones only)
-  `list sangoma phones` — every Sangoma phone DPMA knows about
-  `sangoma phone <ext>` — DPMA detail for one phone (model, firmware, IP, state)
-  `diagnose sangoma <ext>` — composite (mapping, license, registration, firmware, alerts, qualify)
-  `dpma alerts` / `sangoma alerts <ext>` — phone-side issues DPMA has flagged
-  `dpma license` — license usage and headroom
-  `reboot sangoma <ext>` — reboot a Sangoma phone (~30s downtime, requires confirm)
-
-**Emergency Multicast Alerts:** (Sangoma/DPMA phones, zones created in EPM)
-  `list multicast zones` — show configured EPM multicast paging zones
-  `emergency alert <recording>` — broadcast a System Recording to the LOCKDOWN zone
-  `emergency alert <recording> on zone <zone>` — broadcast to a specific zone
-  `lockdown <recording>` — shorthand for the LOCKDOWN zone
+**SIP Channels & Trace:**
   `sip channels` — show active SIP channels
   `sip channels for <ext>` — filtered by endpoint
   `start sip trace` / `start trace <duration>` — capture SIP traffic (admin, max 30s)
