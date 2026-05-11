@@ -1325,8 +1325,26 @@ class ChatParser {
 		}
 
 		// ── Backups ──
-		if (preg_match('/^list\s+backups?$/i', $lower)) {
-			return ['tool' => 'fm_list_backups', 'params' => []];
+		if (preg_match('/^list\s+backup\s+jobs?$/i', $lower)
+			|| preg_match('/^list\s+backups?$/i', $lower)
+			|| preg_match('/^show\s+backup\s+jobs?$/i', $lower)) {
+			return ['tool' => 'fm_list_backup_jobs', 'params' => []];
+		}
+		if (preg_match('/^(?:show|get)\s+backup\s+status$/i', $lower)
+			|| preg_match('/^backup\s+status$/i', $lower)) {
+			return ['tool' => 'fm_backup_status', 'params' => []];
+		}
+		if (preg_match('/^(?:show|get)?\s*backup\s+status\s+(?:for\s+)?(.+)$/i', $msg, $m)) {
+			return ['tool' => 'fm_backup_status', 'params' => ['job_name' => trim($m[1])]];
+		}
+		if (preg_match('/^list\s+(?:failed\s+backups?(?:\s+jobs?)?|backup\s+failures)$/i', $lower)) {
+			return ['tool' => 'fm_list_backup_runs', 'params' => ['status' => 'failed_inferred']];
+		}
+		if (preg_match('/^list\s+backup\s+runs?$/i', $lower)) {
+			return ['tool' => 'fm_list_backup_runs', 'params' => []];
+		}
+		if (preg_match('/^list\s+backup\s+runs?\s+for\s+(.+)$/i', $msg, $m)) {
+			return ['tool' => 'fm_list_backup_runs', 'params' => ['job_name' => trim($m[1])]];
 		}
 		if (preg_match('/^(show|get)\s+backup\s+(\S+)$/i', $msg, $m)) {
 			return ['tool' => 'fm_get_backup', 'params' => ['id' => $m[2]]];
@@ -1835,7 +1853,8 @@ class ChatParser {
 			'list time conditions', 'list call flows', 'list recordings',
 			'list moh', 'list feature codes', 'list paging groups', 'list parking',
 			'list announcements', 'list modules', 'list notifications',
-			'list certificates', 'list filestores', 'list backups',
+			'list certificates', 'list filestores', 'list backup jobs', 'backup status',
+			'list backup runs', 'list failed backups', 'list failed backup jobs',
 			'list destinations', 'list sound packs', 'list settings',
 			'list permissions', 'list voicemail settings',
 			'active calls', 'call history', 'queue status',
@@ -2057,7 +2076,10 @@ class ChatParser {
   `show firewall` / `add <network> to zone <zone>`
 
 **Backups & Storage:**
-  `list backups` / `show backup <id>`
+  `list backup jobs` / `show backup <id>`
+  `backup status` / `backup status for <name>`
+  `list backup runs` / `list backup runs for <name>`
+  `list failed backups` / `list failed backup jobs`
   `list filestores` / `list certificates`
 
 **Services & License:**

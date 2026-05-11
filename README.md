@@ -1,6 +1,6 @@
 # Frogman 🐸
 
-**Headless PBX control through MCP and HTTP API.** Any AI, bot, or app connects and manages FreePBX through 223 tools. No GraphQL needed.
+**Headless PBX control through MCP and HTTP API.** Any AI, bot, or app connects and manages FreePBX through 228 tools. No GraphQL needed.
 
 Connect via MCP and ask "why can't extension 101 make calls?" — Frogman runs live diagnostics, searches its built-in knowledge base, and hands the AI everything it needs to answer.
 
@@ -75,9 +75,9 @@ This is optional — all other tools work without it. Without this, service tool
 
 ## Architecture
 
-Frogman is the MCP server — the AI interface to the PBX. Frogman is the FreePBX module that provides the 223 tools it exposes. Together, they have two interfaces:
+Frogman is the MCP server — the AI interface to the PBX. Frogman is the FreePBX module that provides the 228 tools it exposes. Together, they have two interfaces:
 
-- **MCP Server** — the core product. Any AI connects via MCP and uses 223 tools to control, diagnose, and troubleshoot the PBX. This is where RAG, reasoning, and intelligent support happen.
+- **MCP Server** — the core product. Any AI connects via MCP and uses 228 tools to control, diagnose, and troubleshoot the PBX. This is where RAG, reasoning, and intelligent support happen.
 - **Web Console & CLI** — a human-friendly chat interface using pattern matching. Same tools, no AI required. Useful for quick tasks without an MCP client.
 
 ### Tool Routing Hierarchy
@@ -113,7 +113,7 @@ Reads from other modules' tables are fine. Writes to other modules go through BM
 - **Confirmation required** — all mutating operations return a dry-run preview unless `confirm: true` is passed.
 - **No user-supplied PHP, SQL, or shell** is ever executed.
 
-## Tool Catalog (223 tools)
+## Tool Catalog (228 tools)
 
 ### Extensions (7)
 
@@ -259,19 +259,28 @@ Reads from other modules' tables are fine. Writes to other modules go through BM
 | `fm_list_moh` | List music on hold categories |
 | `fm_list_recordings` | List all system recordings |
 
-### System (9)
+### System (8)
 
 | Tool | Description |
 |------|-------------|
 | `fm_reload` | Apply config changes (checks active calls first) **[confirm]** |
-| `fm_backup_create` | Run a backup job by ID **[confirm]** |
 | `fm_module_list` | List FreePBX modules. Optional filters: `status`, `license` (commercial/gpl/gpl2/gpl3/agpl/other), `all`. Chat shows a clickable summary by default — chat: `list modules`, `list modules commercial`, `list all modules` |
-| `fm_check_upgrades` | Query online repos for module upgrades (~10s, network call) — chat: `check for upgrades` |
+| `fm_check_upgrades` | Query online repos for module upgrades (~10s, network call). Per-row "⬆️ Upgrade" chip and bottom "⬆️ Upgrade all" chip — chat: `check for upgrades` |
 | `fm_module_status` | Detailed status of a specific module |
 | `fm_get_asterisk_info` | Asterisk uptime, version, channels, registrations |
 | `fm_get_firewall_status` | Firewall and intrusion detection status |
 | `fm_get_sip_settings` | SIP/PJSIP settings — external IP, NAT, ports |
 | `fm_repair_userman_links` | Restore default-group + assigned wiring on User Manager users so UCP login works **[confirm]** — chat: `repair userman`, `fix ucp logins`, `repair userman 1001` |
+
+### Backups (5)
+
+| Tool | Level | Description |
+|------|-------|-------------|
+| `fm_list_backup_jobs` | read | List configured backup jobs with schedule, destinations, retention, email — chat: `list backup jobs` |
+| `fm_backup_status` | read | Per-job health: last successful run, in-flight, next/previous scheduled tick, missed-run inference — chat: `backup status`, `backup status for <name>` |
+| `fm_list_backup_runs` | read | Real run history (success/running/failed) + synthetic `failed_inferred` rows for missed scheduled ticks — chat: `list backup runs`, `list backup runs for <name>`, `list failed backup jobs` |
+| `fm_get_backup` | read | Full config of one backup job by ID — chat: `show backup <id>` |
+| `fm_backup_create` | admin | Run a backup job by ID **[confirm]** |
 
 ### Live Call Control (7) — via AMI
 
@@ -350,6 +359,13 @@ Reads from other modules' tables are fine. Writes to other modules go through BM
 | Tool | Level | Description |
 |------|-------|-------------|
 | `fm_sc_status` | read | SC preflight diagnostic — license, domain, cert, seats, next-step hints with clickable purchase/cert links |
+
+### Sangoma Paging — DPMA Multicast (2)
+
+| Tool | Level | Description |
+|------|-------|-------------|
+| `fm_list_sangoma_multicast_zones` | read | List configured multicast paging zones discovered from DPMA (group, IP, port, members) — chat: `list multicast zones` |
+| `fm_sangoma_emergency_alert` | admin | In-walls multicast emergency page to Sangoma P-series phones via DPMA, LAN-only **[confirm]** — chat: `page emergency`, `emergency page` |
 
 ### Notifications & Sounds (3)
 

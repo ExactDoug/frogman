@@ -538,7 +538,7 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 				}
 				$lines = ["**⬆️ Upgrades Available** ({$data['count']}):"];
 				foreach ($data['upgrades'] as $u) {
-					$lines[] = "  {{cmd:upgrade module {$u['name']}|⬆️ {$u['name']}}} — current v{$u['current_version']}";
+					$lines[] = "  `{$u['name']}` — current v{$u['current_version']} • {{cmd:upgrade module {$u['name']}|⬆️ Upgrade}}";
 				}
 				$lines[] = "\n{{cmd:upgrade all modules|⬆️ Upgrade all}}";
 				return implode("\n", $lines);
@@ -2005,6 +2005,71 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 					foreach ($available as $p) {
 						$lines[] = "  ⚪ `{$p['id']}` — {$p['language']}";
 					}
+				}
+				return implode("\n", $lines);
+
+			case 'fm_list_backup_jobs':
+				if (empty($data['jobs'])) return "No backup jobs configured.";
+				$lines = ["**Backup jobs** ({$data['count']}):"];
+				foreach ($data['jobs'] as $job) {
+					$enabled = !empty($job['schedule_enabled']) ? '✓' : '✗';
+					$schedule = !empty($job['schedule']) ? "`{$job['schedule']}`" : '(no schedule)';
+					$destNames = array_map(function($d) {
+						return ($d['driver'] ?? '?') . ': ' . ($d['name'] ?? $d['id'] ?? '?');
+					}, $job['destinations'] ?? []);
+					$dest = !empty($destNames) ? implode(', ', $destNames) : '(no destination)';
+					$lines[] = "  {$enabled} **{{cmd:backup status for {$job['name']}|{$job['name']}}}** — {$schedule} → {$dest}";
+				}
+				return implode("\n", $lines);
+
+			case 'fm_backup_status':
+				$summary = $data['summary'] ?? [];
+				$lines = ["**Backup status** — {$summary['total']} total · {$summary['scheduled']} scheduled · ⚠ {$summary['missed']} missed · 🔄 {$summary['in_flight']} in-flight"];
+				if (empty($data['jobs'])) {
+					$lines[] = "\nNo matching jobs.";
+					return implode("\n", $lines);
+				}
+				foreach ($data['jobs'] as $job) {
+					$lines[] = '';
+					$lastOk = $job['last_successful_run']['timestamp'] ?? null;
+					$inFlight = $job['in_flight'] ?? null;
+					if ($inFlight) {
+						$icon = '🔄';
+						$detail = "running ({$inFlight['status']})";
+					} elseif (!empty($job['missed'])) {
+						$icon = '⚠';
+						$detail = "MISSED — " . ($job['missed_reason'] ?? 'no recent success');
+					} elseif ($lastOk) {
+						$icon = '✓';
+						$detail = "last success: {$lastOk}";
+					} else {
+						$icon = '·';
+						$detail = 'no runs on record';
+					}
+					$lines[] = "{$icon} **{$job['name']}** — {$detail}";
+					if (!empty($job['next_scheduled_run'])) {
+						$lines[] = "  next: {$job['next_scheduled_run']}";
+					}
+					if (!empty($job['last_successful_run']['file_size'])) {
+						$mb = round($job['last_successful_run']['file_size'] / 1048576, 1);
+						$lines[] = "  last artifact: {$mb} MB";
+					}
+				}
+				return implode("\n", $lines);
+
+			case 'fm_list_backup_runs':
+				if (empty($data['runs'])) return $data['message'] ?? 'No backup runs to show.';
+				$lines = ["**Backup runs** ({$data['count']}" . (!empty($data['truncated']) ? ", truncated" : "") . "):"];
+				foreach ($data['runs'] as $run) {
+					$icon = ['success' => '✓', 'running' => '🔄', 'failed' => '✗', 'failed_inferred' => '⚠'][$run['status']] ?? '·';
+					$when = $run['finished_at'] ?? '(no timestamp)';
+					$line = "  {$icon} **{$run['job_name']}** — `{$run['status']}` @ {$when}";
+					if (!empty($run['file_size'])) {
+						$mb = round($run['file_size'] / 1048576, 1);
+						$line .= " · {$mb} MB";
+					}
+					if (!empty($run['error'])) $line .= "\n     {$run['error']}";
+					$lines[] = $line;
 				}
 				return implode("\n", $lines);
 
