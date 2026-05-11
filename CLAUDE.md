@@ -36,7 +36,7 @@ Pick the highest item that does the job. **BMO first** for any FreePBX-object ma
 
 A generic name (`fm_list_phones`, `fm_diagnose_phone`) MUST work across every brand of phone the system supports — Sangoma, Yealink, Polycom, Cisco, Grandstream, Algo, etc. If a tool only works on one brand or one vendor protocol, the brand/protocol goes in the tool name and the chat alias.
 
-- DPMA/Sangoma-specific: `fm_list_sangoma_phones`, `fm_diagnose_sangoma_phone`, `fm_reboot_sangoma_phone`. Chat: `list sangoma phones`, `diagnose sangoma 1005`.
+- Vendor-specific (hypothetical, since current build is open-source-only): would be named e.g. `fm_list_<vendor>_phones`, `fm_diagnose_<vendor>_phone`. Chat: `list <vendor> phones`, `diagnose <vendor> 1005`.
 - Cross-brand (works via EPM regardless of vendor): `fm_list_phones`, `fm_phone_rebuild_config`. Chat: `list phones`, `rebuild phone configs`.
 
 Decision rule: ask "does this work for a Yealink phone too?" If no → vendor name in the tool name.
