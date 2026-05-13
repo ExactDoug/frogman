@@ -24,6 +24,12 @@ class RunSavedQuery extends AbstractTool {
 		return null;
 	}
 
+	// Executes an arbitrary saved GraphQL query — including mutations if any saved
+	// query happens to be one. The tool can't tell read queries from writes, so the
+	// only safe gate is the caller's trust level. Admin-grade access, not write-with-
+	// confirm (a malicious caller just confirms).
+	public function permissionLevel() { return self::PERM_ADMIN; }
+
 	public function execute($params, $context) {
 		$name = $params['name'];
 		$variables = $params['params'] ?? [];

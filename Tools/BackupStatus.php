@@ -20,6 +20,11 @@ class BackupStatus extends AbstractTool {
 
 	public function requiredPermission() { return null; }
 
+	// Output includes filesystem paths to backup artifacts (e.g. /var/spool/asterisk/...),
+	// transaction UUIDs that index the kvstore, and per-run timing metadata — operational
+	// internals that read-tier callers shouldn't see.
+	public function permissionLevel() { return self::PERM_ADMIN; }
+
 	public function execute($params, $context) {
 		$jobIdFilter = $params['job_id'] ?? null;
 		$jobNameFilter = isset($params['job_name']) ? strtolower(trim((string)$params['job_name'])) : null;

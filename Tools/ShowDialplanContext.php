@@ -13,6 +13,10 @@ class ShowDialplanContext extends AbstractTool {
 		}
 		return true;
 	}
+	// Full dialplan context exposes operational routing logic — feature codes, app
+	// extensions, dispatch rules — that reveals how the PBX is internally wired.
+	// Admin-grade reading.
+	public function permissionLevel() { return self::PERM_ADMIN; }
 	public function execute($params, $context) {
 		$name = $params['name'];
 		$astman = $this->freepbx->astman;

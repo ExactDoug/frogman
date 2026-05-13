@@ -9,6 +9,10 @@ class WhosCalling extends AbstractTool {
 		if (empty($params['number'])) return 'Parameter "number" is required';
 		return true;
 	}
+	// Returns CDR history (caller IDs, destinations, dispositions, timestamps) for any
+	// number on the PBX — that's call-history PII. PERM_READ would let any read-tier
+	// caller pull anyone's call records.
+	public function permissionLevel() { return self::PERM_ADMIN; }
 	public function execute($params, $context) {
 		$number = $params['number'];
 		$db = $this->freepbx->Database;

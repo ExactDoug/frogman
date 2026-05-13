@@ -6,6 +6,10 @@ class GetMcpConfig extends AbstractTool {
 	public function name() { return 'fm_get_mcp_config'; }
 	public function description() { return 'Get MCP connection config for Claude Desktop or Claude Code. Shows copy-paste ready configuration.'; }
 	public function validate($params) { return true; }
+	// Output is a ready-to-paste MCP config that includes a root SSH command
+	// (ssh root@<host> php /var/www/.../mcp-server.php). That's an operator
+	// runbook, not a read-tier surface — bumped to admin.
+	public function permissionLevel() { return self::PERM_ADMIN; }
 	public function execute($params, $context) {
 		$host = gethostname();
 		$ip = $_SERVER['SERVER_ADDR'] ?? exec('hostname -I 2>/dev/null | awk \'{print $1}\'');
