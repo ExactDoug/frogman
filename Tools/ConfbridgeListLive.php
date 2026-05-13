@@ -7,6 +7,9 @@ class ConfbridgeListLive extends AbstractTool {
 	public function description() { return 'List participants in a live conference. Params: room (required).'; }
 	public function validate($params) {
 		if (empty($params['room'])) return 'Parameter "room" is required';
+		// `room` is interpolated into an AMI Command string ("confbridge list <room>").
+		// AMI is line-framed — a newline or unexpected token could disturb parsing.
+		if (!preg_match('/^[a-zA-Z0-9._-]+$/', $params['room'])) return 'Parameter "room" must be alphanumeric (with . _ - allowed)';
 		return true;
 	}
 	public function execute($params, $context) {

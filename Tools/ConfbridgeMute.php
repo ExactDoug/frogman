@@ -8,6 +8,9 @@ class ConfbridgeMute extends AbstractTool {
 	public function validate($params) {
 		if (empty($params['room'])) return 'Parameter "room" is required';
 		if (empty($params['channel'])) return 'Parameter "channel" is required';
+		if (!preg_match('/^[a-zA-Z0-9._-]+$/', $params['room'])) return 'Parameter "room" must be alphanumeric (with . _ - allowed)';
+		if (!preg_match('/^[a-zA-Z0-9._\/-]+$/', $params['channel'])) return 'Parameter "channel" has invalid format (expected <tech>/<endpoint>-<uniqueid>)';
+		if (isset($params['action']) && !in_array($params['action'], ['mute','unmute'], true)) return 'Parameter "action" must be "mute" or "unmute"';
 		return true;
 	}
 	public function permissionLevel() { return self::PERM_WRITE; }

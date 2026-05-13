@@ -7,6 +7,8 @@ class ConfbridgeLock extends AbstractTool {
 	public function description() { return 'Lock or unlock a conference room. Params: room (required), action (lock/unlock, default lock). Requires confirm:true.'; }
 	public function validate($params) {
 		if (empty($params['room'])) return 'Parameter "room" is required';
+		if (!preg_match('/^[a-zA-Z0-9._-]+$/', $params['room'])) return 'Parameter "room" must be alphanumeric (with . _ - allowed)';
+		if (isset($params['action']) && !in_array($params['action'], ['lock','unlock'], true)) return 'Parameter "action" must be "lock" or "unlock"';
 		return true;
 	}
 	public function permissionLevel() { return self::PERM_WRITE; }

@@ -8,6 +8,10 @@ class ConfbridgeKick extends AbstractTool {
 	public function validate($params) {
 		if (empty($params['room'])) return 'Parameter "room" is required';
 		if (empty($params['channel'])) return 'Parameter "channel" is required';
+		// Defense-in-depth: send_request is less line-framing-sensitive than Command,
+		// but `room` and `channel` still flow into AMI headers — keep the surface tight.
+		if (!preg_match('/^[a-zA-Z0-9._-]+$/', $params['room'])) return 'Parameter "room" must be alphanumeric (with . _ - allowed)';
+		if (!preg_match('/^[a-zA-Z0-9._\/-]+$/', $params['channel'])) return 'Parameter "channel" has invalid format (expected <tech>/<endpoint>-<uniqueid>)';
 		return true;
 	}
 	public function permissionLevel() { return self::PERM_WRITE; }
