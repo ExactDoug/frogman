@@ -1498,26 +1498,28 @@ class ChatParser {
 		}
 
 		// ── Conference Control ──
+		// All Confbridge* tools expect `room` (not `id`) and use `action` (not `state`)
+		// with values matching their description ("mute"/"unmute", "lock"/"unlock").
 		if (preg_match('/^who.s\s+in\s+conference\s+(\d+)$/i', $msg, $m)) {
-			return ['tool' => 'fm_conference_participants', 'params' => ['id' => $m[1]]];
+			return ['tool' => 'fm_conference_participants', 'params' => ['room' => $m[1]]];
 		}
 		if (preg_match('/^kick\s+(\S+)\s+from\s+conference\s+(\d+)$/i', $msg, $m)) {
-			$params = ['id' => $m[2], 'channel' => $m[1]];
+			$params = ['room' => $m[2], 'channel' => $m[1]];
 			self::setPending($sessionId, 'fm_conference_kick', $params);
 			return ['tool' => 'fm_conference_kick', 'params' => $params];
 		}
 		if (preg_match('/^(mute|unmute)\s+(\S+)\s+in\s+conference\s+(\d+)$/i', $msg, $m)) {
-			$params = ['id' => $m[3], 'channel' => $m[2], 'state' => strtolower($m[1]) === 'mute' ? 'on' : 'off'];
+			$params = ['room' => $m[3], 'channel' => $m[2], 'action' => strtolower($m[1])];
 			self::setPending($sessionId, 'fm_conference_mute', $params);
 			return ['tool' => 'fm_conference_mute', 'params' => $params];
 		}
 		if (preg_match('/^lock\s+conference\s+(\d+)$/i', $msg, $m)) {
-			$params = ['id' => $m[1], 'state' => 'lock'];
+			$params = ['room' => $m[1], 'action' => 'lock'];
 			self::setPending($sessionId, 'fm_conference_lock', $params);
 			return ['tool' => 'fm_conference_lock', 'params' => $params];
 		}
 		if (preg_match('/^unlock\s+conference\s+(\d+)$/i', $msg, $m)) {
-			$params = ['id' => $m[1], 'state' => 'unlock'];
+			$params = ['room' => $m[1], 'action' => 'unlock'];
 			self::setPending($sessionId, 'fm_conference_lock', $params);
 			return ['tool' => 'fm_conference_lock', 'params' => $params];
 		}
@@ -2059,6 +2061,14 @@ class ChatParser {
   `why can't <ext> make calls` — same as above
   `diagnose trunk <id>` — trunk diagnostic (registration, qualify, routes, CDR)
   `endpoint details <ext>` — deep PJSIP endpoint info (codecs, transport, auth)
+
+**Call Flow Trace (Mermaid):**
+  `trace flow <did>` — full destination chain rendered as a Mermaid diagram
+  `trace call flow <did>` — same
+  `show flow for <did>` — same
+  `where does <did> go` — same
+  `how does <did> ring` — same
+  `did map` / `inbound map` — every DID at once, first-hop only
 
 **SIP Channels & Trace:**
   `sip channels` — show active SIP channels
