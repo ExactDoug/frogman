@@ -22,19 +22,21 @@ class DeleteApiToken extends AbstractTool {
 		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
 		$db = $this->freepbx->Database;
 
-		$sth = $db->prepare("SELECT username, CONCAT(LEFT(token, 8), '...') as preview, active FROM oc_api_tokens WHERE id = ?");
+		$sth = $db->prepare("SELECT username, description, active FROM oc_api_tokens WHERE id = ?");
 		$sth->execute([$id]);
 		$token = $sth->fetch(\PDO::FETCH_ASSOC);
 		if (!$token) throw new \Exception("Token {$id} not found");
 
+		$label = "token #{$id} (`{$token['username']}`" . (!empty($token['description']) ? ", \"{$token['description']}\"" : '') . ")";
+
 		if (!$confirm) {
 			$status = $token['active'] ? 'active' : 'revoked';
-			return ['dry_run' => true, 'message' => "Would permanently delete token {$token['preview']} for `{$token['username']}` ({$status})."];
+			return ['dry_run' => true, 'message' => "Would permanently delete {$label} ({$status})."];
 		}
 
 		$sth = $db->prepare("DELETE FROM oc_api_tokens WHERE id = ?");
 		$sth->execute([$id]);
 
-		return ['dry_run' => false, 'message' => "Token {$token['preview']} for `{$token['username']}` permanently deleted."];
+		return ['dry_run' => false, 'message' => "{$label} permanently deleted."];
 	}
 }

@@ -6,6 +6,27 @@ if (!defined('FREEPBX_IS_AUTH')) { die('No direct script access allowed'); }
 
 $db = FreePBX::Database();
 
+// GHSA-9xf5-9ghq-p6cw — hash existing plaintext API tokens in oc_api_tokens.
+// Stored format: `sha256$<64-hex-hash>` (71 chars). The prefix makes the migration
+// idempotent (re-running skips already-prefixed rows) and self-describing, so
+// auth code can tell at a glance whether a row has been hashed.
+//
+// The ALTER is defensive: module.xml declares VARCHAR(80) but Doctrine's reconciler
+// can miss column-width bumps on some FreePBX versions, and an unwidened column
+// would silently truncate the stored hash. Idempotent MODIFY is cheap insurance.
+try {
+	$db->query("ALTER TABLE oc_api_tokens MODIFY COLUMN token VARCHAR(80) NOT NULL DEFAULT ''");
+	$db->query("UPDATE oc_api_tokens SET token = CONCAT('sha256\$', SHA2(token, 256)) WHERE token != '' AND token NOT LIKE 'sha256\$%'");
+	if (function_exists('out')) {
+		out(_("Frogman: ensured all API tokens are stored hashed (GHSA-9xf5-9ghq-p6cw)."));
+	}
+} catch (\Throwable $e) {
+	if (function_exists('out')) {
+		out(_("Frogman: token hash migration failed — ") . $e->getMessage());
+	}
+	throw $e;
+}
+
 // GHSA-3p65-2prr-cfvf — scrub plaintext sensitive values from historical
 // oc_audit_log entries. New writes go through Frogman::redactSensitive() in the
 // audit methods; this one-shot scan covers anything written before the upgrade.

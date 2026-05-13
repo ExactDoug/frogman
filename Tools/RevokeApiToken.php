@@ -21,18 +21,20 @@ class RevokeApiToken extends AbstractTool {
 		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
 		$db = $this->freepbx->Database;
 
-		$sth = $db->prepare("SELECT username, CONCAT(LEFT(token, 8), '...') as preview FROM oc_api_tokens WHERE id = ?");
+		$sth = $db->prepare("SELECT username, description FROM oc_api_tokens WHERE id = ?");
 		$sth->execute([$id]);
 		$token = $sth->fetch(\PDO::FETCH_ASSOC);
 		if (!$token) throw new \Exception("Token {$id} not found");
 
+		$label = "token #{$id} (`{$token['username']}`" . (!empty($token['description']) ? ", \"{$token['description']}\"" : '') . ")";
+
 		if (!$confirm) {
-			return ['dry_run' => true, 'message' => "Would revoke API token {$token['preview']} for `{$token['username']}`."];
+			return ['dry_run' => true, 'message' => "Would revoke {$label}."];
 		}
 
 		$sth = $db->prepare("UPDATE oc_api_tokens SET active = 0 WHERE id = ?");
 		$sth->execute([$id]);
 
-		return ['dry_run' => false, 'message' => "API token revoked for `{$token['username']}`."];
+		return ['dry_run' => false, 'message' => "{$label} revoked."];
 	}
 }

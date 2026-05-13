@@ -30,10 +30,14 @@ class CreateApiToken extends AbstractTool {
 			return ['dry_run' => true, 'message' => "Would create API token for `{$username}` with `{$level}` access."];
 		}
 
+		// GHSA-9xf5-9ghq-p6cw — store `sha256$<hash>`; return the raw token to the
+		// caller once. A DB leak surfaces hashes, not reusable tokens. The prefix
+		// makes the row self-describing for the install.php idempotent migration.
 		$token = bin2hex(random_bytes(32));
+		$tokenStored = 'sha256$' . hash('sha256', $token);
 		$db = $this->freepbx->Database;
 		$sth = $db->prepare("INSERT INTO oc_api_tokens (username, token, description, level, active, created_at) VALUES (?, ?, ?, ?, 1, ?)");
-		$sth->execute([$username, $token, $description, $level, time()]);
+		$sth->execute([$username, $tokenStored, $description, $level, time()]);
 
 		return [
 			'dry_run' => false,

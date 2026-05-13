@@ -75,8 +75,12 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 		// through to localhost trust.
 		$token = $_SERVER['HTTP_X_FROGMAN_TOKEN'] ?? '';
 		if (!empty($token)) {
+			// oc_api_tokens.token stores `sha256$<hash>` — never the raw value. The
+			// prefix is self-describing and lets install.php run an idempotent migration.
+			// See GHSA-9xf5-9ghq-p6cw.
+			$tokenStored = 'sha256$' . hash('sha256', $token);
 			$sth = $this->db->prepare("SELECT username, level FROM oc_api_tokens WHERE token = ? AND active = 1");
-			$sth->execute([$token]);
+			$sth->execute([$tokenStored]);
 			$row = $sth->fetch(\PDO::FETCH_ASSOC);
 			if ($row) {
 				$this->authContext = ['user' => $row['username'], 'level' => $row['level']];

@@ -94,7 +94,7 @@
 		<table name="oc_api_tokens">
 			<field name="id" type="integer" unsigned="true" primarykey="true" autoincrement="true"/>
 			<field name="username" type="string" length="100" default=""/>
-			<field name="token" type="string" length="64" default=""/>
+			<field name="token" type="string" length="80" default=""/>
 			<field name="description" type="string" length="255" notnull="false"/>
 			<field name="level" type="string" length="20" default="read"/>
 			<field name="active" type="integer" unsigned="true" default="1"/>
