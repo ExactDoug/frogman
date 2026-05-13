@@ -544,6 +544,19 @@ php /var/www/html/admin/modules/frogman/mcp-server.php
 }
 ```
 
+#### Other MCP clients
+
+The same SSH-transport config works for any stdio-MCP client — Frogman doesn't care which one's on the other end of the pipe. Point your client's MCP config at:
+
+```
+command: ssh
+args:    root@YOUR_FREEPBX_HOST php /var/www/html/admin/modules/frogman/mcp-server.php
+```
+
+Tested with **Claude Desktop**, **Claude Code**, **Cursor**, and **Windsurf**. Any other MCP-compatible client (OpenClaw, Continue, etc.) should work — the protocol is the same.
+
+For non-MCP integrations (LangChain, OpenAI function calling, Slack/Teams/Telegram bots, custom dashboards), use the HTTP API instead — see **[INTEGRATION.md](INTEGRATION.md)** for token auth, tool catalog, and per-language examples.
+
 ### Knowledge Base (RAG)
 
 Frogman ships with curated troubleshooting and how-to documentation in `docs/`. The `fm_search_docs` tool searches these articles by keyword and returns relevant sections.
