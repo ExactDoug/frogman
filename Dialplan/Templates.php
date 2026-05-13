@@ -6,6 +6,12 @@ require_once __DIR__ . '/TemplateBase.php';
 /**
  * All dialplan templates in one file.
  * Each generates correct, complete Asterisk dialplan for extensions_custom.conf.
+ *
+ * Every template implements validateParams() per the contract in TemplateBase.
+ * Validation is the load-bearing security boundary — generated dialplan is
+ * appended to extensions_custom.conf which is included by Asterisk, so any
+ * caller-controlled value that reaches generate() without being checked is a
+ * remote-code-execution surface. See GHSA-pxfc-q72v-jh8m.
  */
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -17,6 +23,33 @@ class IvrTemplate extends TemplateBase {
 		'create a menu on 8000 press 1 for sales ring 600 press 2 for support ring 601',
 		'build an ivr on extension 7000 with greeting, 1 goes to 1001, 2 goes to 1002, 0 for operator',
 	];}
+
+	public function validateParams($params) {
+		if ($err = $this->rejectDangerous($params)) return $err;
+		if (!isset($params['extension']) || !$this->isDigits($params['extension'])) {
+			return "ivr: 'extension' is required and must be digits";
+		}
+		if (empty($params['options']) || !is_array($params['options'])) {
+			return "ivr: 'options' is required and must be a map of digit => destination";
+		}
+		foreach ($params['options'] as $digit => $dest) {
+			if (!preg_match('/^\d$/', (string)$digit)) {
+				return "ivr: options key '{$digit}' must be a single digit (0-9)";
+			}
+			if (!$this->isDestination($dest)) {
+				return "ivr: options[{$digit}] = '{$dest}' is not a valid destination";
+			}
+		}
+		if (isset($params['greeting']) && !$this->isSoundFile($params['greeting'])) {
+			return "ivr: 'greeting' must be a sound-file reference (alphanumerics, /, ., _, -)";
+		}
+		foreach (['timeout', 'default', 'invalid'] as $key) {
+			if (isset($params[$key]) && $params[$key] !== 'i' && $params[$key] !== 't' && !$this->isDestination($params[$key])) {
+				return "ivr: '{$key}' must be 'i', 't', or a valid destination";
+			}
+		}
+		return true;
+	}
 
 	public function generate($params) {
 		$ext = $params['extension'];
@@ -68,6 +101,30 @@ class TimeRouteTemplate extends TemplateBase {
 		'time route for 1001 9am-5pm monday-friday to 600 otherwise to voicemail',
 	];}
 
+	public function validateParams($params) {
+		if ($err = $this->rejectDangerous($params)) return $err;
+		$ext = $params['extension'] ?? $params['did'] ?? null;
+		if ($ext !== null && $ext !== 's' && !$this->isDigits($ext)) {
+			return "time-route: 'extension'/'did' must be digits or 's'";
+		}
+		foreach (['business_dest', 'after_dest'] as $key) {
+			if (!isset($params[$key])) return "time-route: '{$key}' is required";
+			if (!$this->isDestination($params[$key])) {
+				return "time-route: '{$key}' = '{$params[$key]}' is not a valid destination";
+			}
+		}
+		if (isset($params['start_time']) && !$this->isTime($params['start_time'])) {
+			return "time-route: 'start_time' must be HH:MM";
+		}
+		if (isset($params['end_time']) && !$this->isTime($params['end_time'])) {
+			return "time-route: 'end_time' must be HH:MM";
+		}
+		if (isset($params['days']) && !$this->isDays($params['days'])) {
+			return "time-route: 'days' must be a day spec (e.g. mon-fri, mon|wed|fri, *)";
+		}
+		return true;
+	}
+
 	public function generate($params) {
 		$ext = $params['extension'] ?? $params['did'] ?? 's';
 		$biz_dest = $params['business_dest'];
@@ -113,6 +170,29 @@ class WebhookTemplate extends TemplateBase {
 		'when a call is answered on 1001 POST to https://api.example.com/call-start',
 		'send a webhook to our crm when calls end',
 	];}
+
+	public function validateParams($params) {
+		if ($err = $this->rejectDangerous($params)) return $err;
+		if (!isset($params['url']) || !$this->isUrl($params['url'])) {
+			return "webhook: 'url' is required and must be a plain http(s) URL (no \${...} placeholders, no backticks)";
+		}
+		if (isset($params['event']) && !$this->inSet($params['event'], ['hangup', 'answer', 'all'])) {
+			return "webhook: 'event' must be one of: hangup, answer, all";
+		}
+		if (isset($params['extension']) && !$this->isDigits($params['extension']) && $params['extension'] !== '_X.') {
+			return "webhook: 'extension' must be digits or '_X.'";
+		}
+		if (isset($params['method']) && !$this->inSet($params['method'], ['POST', 'GET', 'PUT', 'DELETE', 'PATCH'])) {
+			return "webhook: 'method' must be one of: POST, GET, PUT, DELETE, PATCH";
+		}
+		if (isset($params['fields'])) {
+			if (!is_array($params['fields'])) return "webhook: 'fields' must be an array of identifiers";
+			foreach ($params['fields'] as $f) {
+				if (!$this->isIdentifier($f)) return "webhook: fields entry '{$f}' must be alphanumeric/_/-";
+			}
+		}
+		return true;
+	}
 
 	public function generate($params) {
 		$url = $params['url'];
@@ -183,6 +263,31 @@ class ApiLookupTemplate extends TemplateBase {
 		'when someone calls 1001 look up their number at https://crm.example.com/lookup and tell the agent who is calling',
 		'look up caller at https://api.example.com/customer?phone=callerid and set the caller name',
 	];}
+
+	public function validateParams($params) {
+		if ($err = $this->rejectDangerous($params)) return $err;
+		// URL may contain {callerid}/{CALLERID}/{caller}/{phone} placeholders that
+		// the template substitutes pre-generation. Substitute a numeric stub before
+		// validating so the placeholder doesn't trip filter_var.
+		if (!isset($params['url'])) return "api-lookup: 'url' is required";
+		$urlForValidation = str_replace(['{callerid}', '{CALLERID}', '{caller}', '{phone}'], '5551234567', $params['url']);
+		if (!$this->isUrl($urlForValidation)) {
+			return "api-lookup: 'url' must be a plain http(s) URL (placeholders {callerid}/{caller}/{phone} are allowed)";
+		}
+		if (isset($params['extension']) && !$this->isDigits($params['extension']) && $params['extension'] !== '_X.') {
+			return "api-lookup: 'extension' must be digits or '_X.'";
+		}
+		if (isset($params['response_field']) && !$this->isIdentifier($params['response_field'])) {
+			return "api-lookup: 'response_field' must be alphanumeric/_/-";
+		}
+		if (isset($params['action']) && !$this->inSet($params['action'], ['set-callerid', 'set-name', 'announce', 'route'])) {
+			return "api-lookup: 'action' must be one of: set-callerid, set-name, announce, route";
+		}
+		if (isset($params['next_dest']) && !$this->isDestination($params['next_dest'])) {
+			return "api-lookup: 'next_dest' is not a valid destination";
+		}
+		return true;
+	}
 
 	public function generate($params) {
 		$url = $params['url'];
@@ -255,6 +360,33 @@ class CallerIdRouteTemplate extends TemplateBase {
 		'send all 800 numbers to queue 400',
 	];}
 
+	public function validateParams($params) {
+		if ($err = $this->rejectDangerous($params)) return $err;
+		if (empty($params['rules']) || !is_array($params['rules'])) {
+			return "cid-route: 'rules' is required and must be a list of {pattern, dest}";
+		}
+		foreach ($params['rules'] as $i => $rule) {
+			if (!is_array($rule) || empty($rule['pattern']) || empty($rule['dest'])) {
+				return "cid-route: rules[{$i}] needs both 'pattern' and 'dest'";
+			}
+			// Pattern is interpolated raw into a GotoIf string comparison; restrict
+			// to caller-ID-like values (digits, optionally with leading +).
+			if (!preg_match('/^\+?\d+$/', (string)$rule['pattern'])) {
+				return "cid-route: rules[{$i}].pattern '{$rule['pattern']}' must be digits (optionally with leading +)";
+			}
+			if (!$this->isDestination($rule['dest'])) {
+				return "cid-route: rules[{$i}].dest '{$rule['dest']}' is not a valid destination";
+			}
+		}
+		if (isset($params['default']) && !$this->isDestination($params['default'])) {
+			return "cid-route: 'default' is not a valid destination";
+		}
+		if (isset($params['extension']) && $params['extension'] !== 's' && !$this->isDigits($params['extension'])) {
+			return "cid-route: 'extension' must be digits or 's'";
+		}
+		return true;
+	}
+
 	public function generate($params) {
 		$rules = $params['rules']; // [['pattern' => '212', 'dest' => '700'], ...]
 		$default_dest = $params['default'] ?? null;
@@ -313,6 +445,36 @@ class FailoverTemplate extends TemplateBase {
 		'failover chain: 1001, 1002, 1003, then voicemail 1001',
 	];}
 
+	public function validateParams($params) {
+		if ($err = $this->rejectDangerous($params)) return $err;
+		if (empty($params['steps']) || !is_array($params['steps'])) {
+			return "failover: 'steps' is required and must be a list of {dest, timeout}";
+		}
+		foreach ($params['steps'] as $i => $step) {
+			if (!is_array($step) || empty($step['dest'])) {
+				return "failover: steps[{$i}] needs 'dest'";
+			}
+			// dest reaches Dial() either as PJSIP/<digits> or PJSIP/<digits>@from-internal
+			// so it must be safe for an Asterisk identifier — digits or alphanumerics-with-dashes.
+			if (!preg_match('/^[a-zA-Z0-9._-]+$/', (string)$step['dest'])) {
+				return "failover: steps[{$i}].dest '{$step['dest']}' must be alphanumeric/_/.";
+			}
+			if (isset($step['timeout']) && (!is_numeric($step['timeout']) || (int)$step['timeout'] <= 0 || (int)$step['timeout'] > 600)) {
+				return "failover: steps[{$i}].timeout must be 1-600 seconds";
+			}
+		}
+		if (isset($params['final'])) {
+			$f = $params['final'];
+			if ($f !== 'hangup' && !$this->isDigits($f) && stripos($f, 'voicemail') === false && stripos($f, 'vm') === false) {
+				return "failover: 'final' must be 'hangup', digits, or contain 'voicemail'/'vm'";
+			}
+		}
+		if (isset($params['extension']) && $params['extension'] !== 's' && !$this->isDigits($params['extension'])) {
+			return "failover: 'extension' must be digits or 's'";
+		}
+		return true;
+	}
+
 	public function generate($params) {
 		$steps = $params['steps']; // [['dest' => '1001', 'timeout' => 15], ...]
 		$final = $params['final'] ?? 'hangup'; // voicemail, hangup, extension
@@ -363,6 +525,31 @@ class FeatureCodeTemplate extends TemplateBase {
 		'make *71 forward my calls to 5551234567',
 		'create star code *80 that plays the current time',
 	];}
+
+	public function validateParams($params) {
+		if ($err = $this->rejectDangerous($params)) return $err;
+		if (empty($params['code']) || !$this->isFeatureCode($params['code'])) {
+			return "feature-code: 'code' is required and must be '*' followed by digits (e.g. *99)";
+		}
+		if (empty($params['action'])) {
+			return "feature-code: 'action' is required";
+		}
+		$validActions = ['readback', 'read-extension', 'time', 'say-time', 'forward', 'call-forward',
+			'forward-cancel', 'announce', 'playback', 'speed-dial', 'echo-test'];
+		if (!$this->inSet($params['action'], $validActions)) {
+			return "feature-code: 'action' must be one of: " . implode(', ', $validActions);
+		}
+		if (isset($params['action_params']) && is_array($params['action_params'])) {
+			$ap = $params['action_params'];
+			if (isset($ap['destination']) && !$this->isDigits($ap['destination'])) {
+				return "feature-code: action_params.destination must be digits";
+			}
+			if (isset($ap['file']) && !$this->isSoundFile($ap['file'])) {
+				return "feature-code: action_params.file must be a sound-file reference";
+			}
+		}
+		return true;
+	}
 
 	public function generate($params) {
 		$code = $params['code']; // e.g. *99
@@ -441,6 +628,20 @@ class AnnouncementTemplate extends TemplateBase {
 		'announce "please hold" on 9000 then send to queue 400',
 	];}
 
+	public function validateParams($params) {
+		if ($err = $this->rejectDangerous($params)) return $err;
+		if (!isset($params['extension']) || !$this->isDigits($params['extension'])) {
+			return "announcement: 'extension' is required and must be digits";
+		}
+		if (!isset($params['destination']) || !$this->isDestination($params['destination'])) {
+			return "announcement: 'destination' is required and must be a valid destination";
+		}
+		if (isset($params['recording']) && !$this->isSoundFile($params['recording'])) {
+			return "announcement: 'recording' must be a sound-file reference";
+		}
+		return true;
+	}
+
 	public function generate($params) {
 		$ext = $params['extension'];
 		$recording = $params['recording'] ?? 'custom/frogman-announcement';
@@ -475,6 +676,32 @@ class CollectAndQueryTemplate extends TemplateBase {
 		'on extension 9000 ask for a 5 digit account number send it to https://billing.example.com/lookup and read back the balance',
 		'collect a PIN on 8500 and verify it at https://auth.example.com/check',
 	];}
+
+	public function validateParams($params) {
+		if ($err = $this->rejectDangerous($params)) return $err;
+		if (!isset($params['extension']) || !$this->isDigits($params['extension'])) {
+			return "collect-query: 'extension' is required and must be digits";
+		}
+		if (!isset($params['url']) || !$this->isUrl($params['url'])) {
+			return "collect-query: 'url' is required and must be a plain http(s) URL";
+		}
+		if (isset($params['digits']) && (!is_numeric($params['digits']) || (int)$params['digits'] < 1 || (int)$params['digits'] > 32)) {
+			return "collect-query: 'digits' must be 1-32";
+		}
+		if (isset($params['response_field']) && !$this->isIdentifier($params['response_field'])) {
+			return "collect-query: 'response_field' must be alphanumeric/_/-";
+		}
+		if (isset($params['prompt']) && !$this->isSoundFile($params['prompt'])) {
+			return "collect-query: 'prompt' must be a sound-file reference";
+		}
+		if (isset($params['action']) && !$this->inSet($params['action'], ['readback', 'route', 'verify'])) {
+			return "collect-query: 'action' must be one of: readback, route, verify";
+		}
+		if (isset($params['next_dest']) && !$this->isDestination($params['next_dest'])) {
+			return "collect-query: 'next_dest' is not a valid destination";
+		}
+		return true;
+	}
 
 	public function generate($params) {
 		$ext = $params['extension'];

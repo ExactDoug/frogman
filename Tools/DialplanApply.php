@@ -30,6 +30,16 @@ class DialplanApply extends AbstractTool {
 		$template = \FreePBX\modules\Frogman\Dialplan\TemplateRegistry::get($templateId);
 		$df = \FreePBX\modules\Frogman\Dialplan\DialplanFile::class;
 
+		// Per-template parameter validation (GHSA-pxfc-q72v-jh8m). The generated
+		// dialplan is appended to extensions_custom.conf and included by Asterisk —
+		// every interpolated value is a code-execution surface unless explicitly
+		// whitelisted. Validation runs before generate() in both dry-run and
+		// execute paths so a caller can't preview-then-bypass.
+		$validationResult = $template->validateParams($params);
+		if ($validationResult !== true) {
+			throw new \Exception("Invalid template parameters: {$validationResult}");
+		}
+
 		// Generate the dialplan block
 		$block = $template->generate($params);
 
