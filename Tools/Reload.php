@@ -17,7 +17,12 @@ class Reload extends AbstractTool {
 			if (!empty($data)) {
 				foreach (explode("\n", $data) as $line) {
 					$line = trim($line);
-					if (!empty($line) && strpos($line, 'Privilege:') !== 0) $activeCalls++;
+					if (empty($line) || strpos($line, 'Privilege:') === 0) continue;
+					// Skip Asterisk internal worker channels — Message/* (SMS queue) and
+					// AsyncGoto/* (dialplan jumps) are not real phone calls. Otherwise the
+					// reload-confirm prompt would fire whenever one of these ghosts was up.
+					if ($this->isAsteriskInternalChannel($line)) continue;
+					$activeCalls++;
 				}
 			}
 		}

@@ -22,7 +22,12 @@ class ToggleTimecondition extends AbstractTool {
 		$id = $params['id'];
 		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
 		$tc = $this->freepbx->Timeconditions->getTimeCondition($id);
-		if (empty($tc)) throw new \Exception("Time condition {$id} not found");
+		// getTimeCondition() returns a non-empty array even when no row matches
+		// (default-shaped record with empty values), so empty($tc) misses the
+		// missing-row case. Check for a populated identity field instead.
+		if (empty($tc['displayname']) && empty($tc['timeconditions_id'])) {
+			throw new \Exception("Time condition {$id} not found");
+		}
 		$currentState = $this->freepbx->Timeconditions->getState($id);
 		$newState = isset($params['state']) ? (int) $params['state'] : ($currentState == 0 ? 1 : 0);
 		$stateNames = [0 => 'normal', 1 => 'override (matched)', 2 => 'override (unmatched)'];
