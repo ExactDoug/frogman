@@ -10,7 +10,7 @@ class UpdateExtension extends AbstractTool {
 	}
 
 	public function description() {
-		return 'Update an existing extension. Params: ext (required), plus any fields to change: name, secret, outboundcid. Requires confirm:true to execute.';
+		return 'Update an existing extension in place. Params: ext (required), plus any fields to change: name, secret, outboundcid. Voicemail, follow-me, Userman, and every other extension setting are preserved. Requires confirm:true to execute.';
 	}
 
 	public function validate($params) {
@@ -28,31 +28,34 @@ class UpdateExtension extends AbstractTool {
 	}
 
 	public function permissionLevel() { return self::PERM_WRITE; }
+
 	public function execute($params, $context) {
 		$ext = $params['ext'];
 		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
 
-		// Verify extension exists
 		$device = $this->freepbx->Core->getDevice($ext);
 		if (empty($device)) {
 			throw new \Exception("Extension {$ext} not found");
 		}
-
 		$user = $this->freepbx->Core->getUser($ext);
-
-		// Build change set
-		$changes = [];
-		if (isset($params['name']) && $params['name'] !== $user['name']) {
-			$changes['name'] = ['from' => $user['name'], 'to' => $params['name']];
-		}
-		if (isset($params['secret']) && $params['secret'] !== $device['secret']) {
-			$changes['secret'] = ['from' => '***', 'to' => '***'];
-		}
-		if (isset($params['outboundcid']) && $params['outboundcid'] !== $user['outboundcid']) {
-			$changes['outboundcid'] = ['from' => $user['outboundcid'], 'to' => $params['outboundcid']];
+		if (empty($user)) {
+			throw new \Exception("Extension {$ext} has a device but no user record — inconsistent state, edit aborted");
 		}
 
-		if (empty($changes)) {
+		$userChanges = [];
+		$deviceChanges = [];
+		if (isset($params['name']) && $params['name'] !== ($user['name'] ?? '')) {
+			$userChanges['name'] = ['from' => $user['name'] ?? '', 'to' => $params['name']];
+		}
+		if (isset($params['outboundcid']) && $params['outboundcid'] !== ($user['outboundcid'] ?? '')) {
+			$userChanges['outboundcid'] = ['from' => $user['outboundcid'] ?? '', 'to' => $params['outboundcid']];
+		}
+		if (isset($params['secret']) && $params['secret'] !== ($device['secret'] ?? '')) {
+			$deviceChanges['secret'] = ['from' => '***', 'to' => '***'];
+		}
+
+		$allChanges = array_merge($userChanges, $deviceChanges);
+		if (empty($allChanges)) {
 			return [
 				'dry_run' => false,
 				'message' => "No changes detected for extension {$ext}",
@@ -63,47 +66,50 @@ class UpdateExtension extends AbstractTool {
 			return [
 				'dry_run' => true,
 				'message' => "Would update extension {$ext}. Pass confirm:true to execute.",
-				'changes' => $changes,
+				'changes' => $allChanges,
+				'preserved' => 'Voicemail, follow-me, Userman, recording prefs, and every unchanged setting will be preserved.',
 			];
 		}
 
-		// Use the GraphQL update approach: delete + recreate with merged data
-		$userman = $this->freepbx->Userman->getUserByUsername($ext);
+		// FreePBX's own edit flow is delete-with-editmode + add-with-editmode. The
+		// editmode flag tells Core to skip the AstDB teardown that a real delete
+		// would do, so registrations, hint state, and device→user links survive
+		// the cycle. We seed the add from get*() output so every field we didn't
+		// touch carries through untouched.
+		if (!empty($userChanges)) {
+			$userVars = $user;
+			if (isset($userChanges['name'])) {
+				$userVars['name'] = $params['name'];
+			}
+			if (isset($userChanges['outboundcid'])) {
+				$userVars['outboundcid'] = $params['outboundcid'];
+			}
+			$userVars['extension'] = $ext;
 
-		$merged = array_merge($user, $device);
-		if (isset($params['name'])) {
-			$merged['name'] = $params['name'];
-			$merged['description'] = $params['name'];
-		}
-		if (isset($params['secret'])) {
-			$merged['secret'] = $params['secret'];
-		}
-		if (isset($params['outboundcid'])) {
-			$merged['outboundcid'] = $params['outboundcid'];
-		}
-
-		$merged['extension'] = $ext;
-		$merged['tech'] = $device['tech'];
-		$merged['vm'] = 'no';
-		$merged['vmpwd'] = '';
-		$merged['email'] = '';
-
-		$this->freepbx->Core->delDevice($ext, true);
-		$this->freepbx->Core->delUser($ext, true);
-		if (!empty($userman)) {
-			$this->freepbx->Userman->deleteUserByID($userman['id']);
+			$this->freepbx->Core->delUser($ext, true);
+			$this->freepbx->Core->addUser($ext, $userVars, true);
 		}
 
-		$result = $this->freepbx->Core->processQuickCreate($device['tech'], $ext, $merged);
+		// addDevice expects the wrapped ['key' => ['value' => x]] shape that
+		// generateDefaultDeviceSettings produces; getDevice returns flat. Wrap
+		// before calling.
+		if (!empty($deviceChanges)) {
+			$deviceVars = [];
+			foreach ($device as $k => $v) {
+				$deviceVars[$k] = ['value' => $v];
+			}
+			if (isset($deviceChanges['secret'])) {
+				$deviceVars['secret']['value'] = $params['secret'];
+			}
 
-		if (empty($result['status'])) {
-			throw new \Exception("Failed to update extension {$ext}");
+			$this->freepbx->Core->delDevice($ext, true);
+			$this->freepbx->Core->addDevice($ext, $device['tech'], $deviceVars, true);
 		}
 
 		return [
 			'dry_run' => false,
 			'message' => "Extension {$ext} updated successfully",
-			'changes' => $changes,
+			'changes' => $allChanges,
 			'needs_reload' => true,
 		];
 	}
