@@ -14,7 +14,7 @@ If GitHub's form doesn't work for you, email me at `mr.mikewhite@me.com` with `[
 
 Anything that lets a caller exceed their granted permission level, expose secrets, execute arbitrary code or shell, escape the tool allowlist, or take a destructive action without the documented `confirm:true` gate.
 
-If you're not sure whether something is a security issue or a regular bug, err on the side of reporting it privately — I'd rather have a duplicate of a public issue than miss a real vulnerability.
+If you're not sure whether something is a security issue or a regular bug, err on the side of reporting it privately... I'd rather have a duplicate of a public issue than miss a real vulnerability.
 
 ## What to expect
 
