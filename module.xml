@@ -1,13 +1,29 @@
 <module>
 	<rawname>frogman</rawname>
 	<name>Frogman</name>
-	<version>1.6.2</version>
+	<version>1.6.3</version>
 	<publisher>Frogman Project</publisher>
 	<license>AGPLv3</license>
 	<licenselink>https://www.gnu.org/licenses/agpl-3.0.txt</licenselink>
 	<category>Admin</category>
 	<description>Complete PBX control through natural language from a web console, chat platforms, MCP, or any API client. 219 tools built entirely on FreePBX's native interfaces (BMO, GraphQL, AMI, fwconsole).</description>
 	<changelog><![CDATA[
+		*1.6.3* **Security release.** Patches one advisory plus five additional bugs surfaced during the v1.6.1 post-release follow-up. Tool count unchanged (219).
+
+		- GHSA-q4c4-5cr4-8q47 (High, CVSS 7.1): privilege-scoping pattern. Eight tools that surface admin-grade data (AMI manager secrets, outbound PINs, full dialplan, root SSH command, backup paths, CDR/PII, arbitrary GraphQL execution, raw AMI endpoint dumps with trunk credentials) were inheriting the default PERM_READ level. Read-tier callers could pull data outside their authorization scope. fm_list_managers, fm_list_pinsets, fm_show_context, fm_get_mcp_config, fm_backup_status, fm_whos_calling, fm_run_saved_query, and fm_diagnose_trunk now require PERM_ADMIN. fm_diagnose_trunk additionally redacts credential-bearing lines (password, md5_cred, oauth_secret, refresh_token, dtls_private_key) from the AMI endpoint dump before storing in the response or audit log — defense in depth, since admin-tier callers also shouldn't have plaintext credentials persisted indefinitely. Real-world exposure at disclosure time was nil (no PERM_READ tokens in active use on any known deployment); fix landed proactively.
+
+		- Issue #15: fm_did_destination_map and fm_list_all_dids rendered every queue destination as the unnamed "Queue NNN" label. Root cause was `Tools/AbstractTool.php`'s describeDestination() helper running a query with `WHERE keyword='descr'` against queues_config — that filter is the schema of queues_details, not queues_config (which has descr as a direct column). Fixed by querying `descr` directly, matching the pattern SearchPbx already uses.
+
+		- Issue #11: every conference chat command (`who's in conference 600`, `kick X from conference 600`, `mute/unmute X in conference 600`, `lock/unlock conference 600`) returned `Parameter "room" is required` and never reached its tool. Root cause was a parameter-name mismatch: ChatParser built params with key `id`, every Confbridge* tool validates `room`. Same fix uncovered a coupled second bug in two of the five patterns — mute/unmute sent `state=on/off` and lock/unlock sent `state=lock/unlock`, but both tools read `params['action']`, so unmute silently muted and unlock silently locked. All three mismatches fixed in one pass.
+
+		- Issue #12: Confbridge* tools accepted any string for `room`, `channel`, and `action` and forwarded them straight to AMI. ConfbridgeListLive's `room` flows into a line-framed AMI Command string — a newline could disturb parsing. Now validated: `room` matches `[a-zA-Z0-9._-]+`, `channel` matches `[a-zA-Z0-9._/-]+` (Asterisk channel format), `action` allowlisted to `['mute','unmute']` or `['lock','unlock']` per tool.
+
+		- Issue #21: three write tools accepted free-text inputs that should be allowlist-validated. ToggleTimecondition now requires `state` to be one of `{0, 1, 2}` (was casting `(int)` after the fact, so 99/abc reached setState unfiltered). UpdateSipNat now validates `external_ip` as either a valid IP or a hostname (FreePBX externip accepts both), and `local_network` as comma/semicolon-separated entries each being a valid IP or CIDR (v4 or v6) with prefix range checked. SetCallForward now requires `type` to be one of `{CF, CFB, CFU}` and `ext` to be numeric.
+
+		- Issue #1 (closed via this release): README now has an explicit "Other MCP clients" subsection naming Claude Desktop, Claude Code, Cursor, Windsurf as tested with the same SSH-transport pattern, plus a pointer to INTEGRATION.md for non-MCP integrations (LangChain, OpenAI function calling, Slack/Teams/Telegram bots).
+
+		**Web-console impact:** non-admin web-console users (sessions without admin in oc_permissions) will be denied access to four chat-exposed tools — `fm_audit_search`, `fm_get_mcp_config`, `fm_backup_status`, `fm_whos_calling`. The chat console's live audit panel is unaffected — it uses a separate handleAuditFeed() endpoint that bypasses fm_audit_search. Sites that legitimately need read-tier users to access any of these can grant them admin via `set permission <user> to admin`.
+
 		*1.6.2* Install/upgrade-path fix for v1.6.1. The v1.6.1 install.php contained `$db = FreePBX::Database();` at file scope. FreePBX `require`s install.php from inside _runscripts() in modulefunctions.class.php, so the bare assignment leaked into the parent scope and replaced the legacy DB-class `$db` global with a BMO `FreePBX\Database` instance. The legacy DB's `escapeSimple` strips quotes (PearDB-compatible); the BMO Database's `escapeSimple` is `PDO::quote()` which keeps them. modulefunctions.class.php:2077 then double-quoted the version string and the modulename, producing `UPDATE modules SET version=''1.6.2'' WHERE modulename=''frogman''` — a SQL syntax error that aborted the install partway, leaving the module in a "Disabled; Pending upgrade" state requiring manual `mysql -e \"UPDATE modules SET version=...\"` recovery. v1.6.2 renames the local to `$frogmanDb` and documents the constraint. Anyone who hit this on v1.6.1: after upgrading to v1.6.2, run `fwconsole ma install frogman` again and it will complete cleanly. No security fixes; this is the install-path regression fix only.
 		*1.6.1* **Security release.** Patches four advisories disclosed via responsible disclosure on the FreePBX community forum on 2026-05-13:
 
