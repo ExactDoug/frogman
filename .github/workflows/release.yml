@@ -87,12 +87,27 @@ jobs:
             | grep "<version>${VER}</version>" > /dev/null \
             || { echo "module.xml version does not match tag ${VER}"; exit 1; }
 
+      - name: Read tag annotation message
+        id: tag_message
+        run: |
+          set -euo pipefail
+          # softprops/action-gh-release@v2 does NOT use the tag annotation
+          # message automatically — we have to read it ourselves and pass it
+          # as `body`. Without this, the release ships with an empty body.
+          # (v1.6.4, v1.6.5, v1.6.6 all shipped with empty bodies because this
+          # was missing — backfilled retroactively via the API.)
+          MSG=$(git for-each-ref "refs/tags/${GITHUB_REF#refs/tags/}" --format='%(contents)')
+          {
+            echo 'body<<RELEASE_BODY_EOF'
+            echo "$MSG"
+            echo 'RELEASE_BODY_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: v${{ steps.version.outputs.version }}
           files: ${{ steps.version.outputs.tarball }}
-          # Tag's annotation message becomes the release body by default.
-          # Leave generate_release_notes off — we write our own.
+          body: ${{ steps.tag_message.outputs.body }}
           generate_release_notes: false
           fail_on_unmatched_files: true
