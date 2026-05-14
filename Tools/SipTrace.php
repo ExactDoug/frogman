@@ -18,6 +18,44 @@ class SipTrace extends AbstractTool {
 		return true;
 	}
 
+	/**
+	 * Is a trace currently active? Reads the meta file and compares its expiry to now.
+	 * Stale-meta defense: any expiry more than 60s in the future is treated as not running
+	 * (the duration cap is 30s, so anything beyond a minute is corrupt or an old install).
+	 */
+	private function isTraceRunning($traceFile) {
+		$metaPath = $traceFile . '.meta';
+		if (!file_exists($metaPath)) return false;
+		$meta = @json_decode((string)@file_get_contents($metaPath), true);
+		if (!is_array($meta) || empty($meta['expiry'])) return false;
+		$expiry = (int)$meta['expiry'];
+		$now = time();
+		if ($expiry - $now > 60) return false;
+		return $now < $expiry;
+	}
+
+	/**
+	 * Stop logic factored out so `start force:true` can run it before launching a new trace.
+	 * Mirrors the stop action body but skips the AMI logger toggle when called from start —
+	 * the new start will re-enable the logger.
+	 */
+	private function stopTraceProcess($traceFile, $astman, $disableLogger = true) {
+		if ($disableLogger && $astman && $astman->connected()) {
+			$astman->Command('pjsip set logger off');
+		}
+		$pgidFile = $traceFile . '.pgid';
+		if (file_exists($pgidFile)) {
+			$pgid = trim((string)@file_get_contents($pgidFile));
+			if ($pgid !== '' && ctype_digit($pgid)) {
+				exec('kill -TERM -' . (int)$pgid . ' 2>/dev/null');
+			}
+			@unlink($pgidFile);
+		}
+		exec('pkill -f "frogman_sip_trace" 2>/dev/null');
+		@unlink($traceFile . '.meta');
+		@unlink($traceFile);
+	}
+
 	public function execute($params, $context) {
 		$astman = $this->freepbx->astman;
 		if (!$astman || !$astman->connected()) throw new \Exception('Cannot connect to Asterisk Manager');
@@ -27,6 +65,28 @@ class SipTrace extends AbstractTool {
 
 		if ($action === 'start') {
 			$duration = isset($params['duration']) ? min((int)$params['duration'], 30) : 10;
+
+			// Refuse if a trace is already running. Two concurrent traces would capture
+			// IDENTICAL data anyway (both tail the same Asterisk log file with the same
+			// filter), so there's no legitimate parallel-trace use case — only "I forgot
+			// I was already tracing" accidents and "two admins overlapping" coordination
+			// gaps. Both want the same answer: tell the caller what's running and let
+			// them choose.
+			if ($this->isTraceRunning($traceFile)) {
+				$force = !empty($params['force']) && $params['force'] === true;
+				$meta = @json_decode((string)@file_get_contents($traceFile . '.meta'), true);
+				$remaining = is_array($meta) && !empty($meta['expiry']) ? max(0, (int)$meta['expiry'] - time()) : 0;
+				if (!$force) {
+					return [
+						'status' => 'refused',
+						'reason' => 'trace_already_running',
+						'expires_in_seconds' => $remaining,
+						'message' => "A SIP trace is already running, expires in {$remaining}s. Wait for it to finish, run `stop sip trace` to take over, or pass `force: true` to replace it.",
+					];
+				}
+				// force=true: stop the running trace before starting fresh.
+				$this->stopTraceProcess($traceFile, $astman, false);
+			}
 
 			// Clear any previous trace
 			@file_put_contents($traceFile, '');
