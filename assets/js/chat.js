@@ -36,17 +36,30 @@ $(function() {
 			return '<pre><code>' + escapeHtml(code.trim()) + '</code></pre>';
 		});
 		// Download links: {{download:url|filename}}
+		// URL is escaped for attribute context AND scheme-checked (block javascript: /
+		// data: / vbscript: which would execute on click). Tool responses are
+		// admin-tier output, but a malicious admin who can edit a reflected field
+		// could otherwise sneak a javascript: URL through.
 		text = text.replace(/\{\{download:([^|]+)\|([^}]+)\}\}/g, function(m, url, label) {
-			return '<a href="' + url + '" download class="oc-download" target="_blank">📥 ' + escapeHtml(label) + '</a>';
+			if (/^\s*(javascript|data|vbscript):/i.test(url)) return escapeHtml(label);
+			return '<a href="' + escapeHtml(url) + '" download class="oc-download" target="_blank">📥 ' + escapeHtml(label) + '</a>';
 		});
 		// Clickable commands: {{cmd:command text|display label}}
 		text = text.replace(/\{\{cmd:([^|]+)\|([^}]+)\}\}/g, function(m, cmd, label) {
 			return '<span class="oc-clickable" data-cmd="' + escapeHtml(cmd) + '">' + escapeHtml(label) + '</span>';
 		});
-		text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-		text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-		// Markdown links: [text](url)
-		text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="oc-link">$1</a>');
+		// Inline `code` — capture body must be escaped before HTML insertion. Without
+		// the escape, a tool response containing `<img src=x onerror=alert(1)>` reaches
+		// the DOM as an actual <img> element. See GHSA-... (filed at v1.6.6 ship time).
+		text = text.replace(/`([^`]+)`/g, function(m, code) { return '<code>' + escapeHtml(code) + '</code>'; });
+		// **bold** — same escape requirement.
+		text = text.replace(/\*\*(.+?)\*\*/g, function(m, body) { return '<strong>' + escapeHtml(body) + '</strong>'; });
+		// Markdown links: [text](url) — URL is constrained by the regex to https?:// so
+		// the scheme is safe. Text and URL both need attribute/body escape (URL could
+		// contain `"` that would break out of href="..." otherwise).
+		text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, function(m, txt, url) {
+			return '<a href="' + escapeHtml(url) + '" target="_blank" class="oc-link">' + escapeHtml(txt) + '</a>';
+		});
 		text = text.replace(/\n/g, '<br>');
 		return text;
 	}

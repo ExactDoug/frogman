@@ -1,13 +1,17 @@
 <module>
 	<rawname>frogman</rawname>
 	<name>Frogman</name>
-	<version>1.6.5</version>
+	<version>1.6.6</version>
 	<publisher>Frogman Project</publisher>
 	<license>AGPLv3</license>
 	<licenselink>https://www.gnu.org/licenses/agpl-3.0.txt</licenselink>
 	<category>Admin</category>
 	<description>Complete PBX control through natural language from a web console, chat platforms, MCP, or any API client. 220 tools built entirely on FreePBX's native interfaces (BMO, GraphQL, AMI, fwconsole).</description>
 	<changelog><![CDATA[
+		*1.6.6* **Security release.** Patches one advisory surfaced during a fresh internal audit on 2026-05-13. 220 tools, unchanged.
+
+		- GHSA (filed at ship time): stored XSS in the chat console's markdown formatter. The four template patterns in assets/js/chat.js's formatMarkdown — inline code, bold, markdown links, and download links — inserted regex capture groups as raw HTML, so any tool response that reflected a user-controlled field (extension name, ring-group description, etc.) could carry an HTML payload that the browser would execute when another admin viewed it through Frogman chat. FreePBX's own admin GUI escapes these fields properly (freepbx_htmlspecialchars throughout the views); the formatter was the leaky side. Real exposure depends on deployment topology — single-admin deployments are unaffected; multi-admin deployments with tier separation in oc_permissions face a write-tier-to-admin-tier escalation vector (lower-tier admin injects via a field they have write access to → higher-tier admin views via Frogman chat → payload runs in higher-tier session). No known affected deployments at disclosure time given the experimental project status. Fix: every regex capture going into HTML now passes through escapeHtml() before insertion, plus a scheme-allowlist on download URLs (block javascript:/data:/vbscript:). The chat console's CSP-less DOM-construction path means escaping at the formatter is the right defensive layer.
+
 		*1.6.5* New tool: fm_delete_userman_user. Wraps Userman->deleteUserByID() for cleaning up orphaned User Manager rows — useful after macro tests, manual extension deletes, or any scenario where the Userman side gets stranded. Accepts either numeric uid or username, requires confirm:true, dry-run preview surfaces whether the user has a linked extension (which is NOT deleted by this tool — by design). Chat: "delete userman user <username>" / "delete userman user <uid>". 220 tools, +1.
 
 		*1.6.4* Bug-fix sweep — eight issues closed across two batches plus the closeout of the long-standing #10 "global page toggle" as architecturally not feasible. No security advisories (all already-known issues). Tool count unchanged (219). New CI: tag-triggered GitHub Actions release workflow that builds the tarball from `git archive` and creates the release automatically; manual `gh release create` flow still works as a fallback.
