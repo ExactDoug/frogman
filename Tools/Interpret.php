@@ -97,7 +97,9 @@ class Interpret {
 			'/^(?:no\s+thanks|no\s+thank\s+you|not\s+now)$/i',
 			'/^(?:no\s+)?(?:you|u)\s+mis+understood$/i',
 			'/^(?:that(?:\'s|s| is)\s+)?not\s+what\s+i\s+mea?nt$/i',
-			'/^(?:i\s+didn\'?t|i\s+didnt)\s+mea?nt?\s+(?:that|this)$/i',
+			'/^(?:i\s+didn\'?t|i\s+didnt|i\s+did\s+not)\s+mea?nt?\s+(?:that|this)$/i',
+			'/^(?:i\s+didn\'?t|i\s+didnt|i\s+did\s+not)\s+say\s+(?:that|this)(?:\s+(?:idiot|stupid|damn|dammit|ffs))?$/i',
+			'/^(?:i\s+didn\'?t|i\s+didnt|i\s+did\s+not)\s+ask\s+for\s+(?:that|this)(?:\s+(?:idiot|stupid|damn|dammit|ffs))?$/i',
 			'/^(?:not\s+what\s+i\s+asked|not\s+what\s+i\s+wanted)$/i',
 			'/^(?:that(?:\'s|s| is)\s+)?(?:the\s+)?wrong\s+(?:thing|command|one)$/i',
 			'/^stop\s+(?:that(?:\'s|s| is)\s+)?wrong$/i',
@@ -157,125 +159,47 @@ class Interpret {
 		$risk = self::RISK_READ;
 		$reasons = [];
 
-		// 1. Strip politeness and filler from the START of the message only.
-		//    Anchored so "show me just the failed calls" doesn't lose "just".
-		$leading = [
-			'/^\s*(please|pls|plz)\s+/i',
-			'/^\s*(could\s+you|can\s+you|would\s+you)\s+/i',
-			'/^\s*(i\s+need\s+to|i\s+want\s+to|i\s+would\s+like\s+to|i\'?d\s+like\s+to)\s+/i',
-			'/^\s*just\s+/i',
-		];
-		$before = $work;
-		$work = preg_replace($leading, '', $work);
-		if ($work !== $before) {
-			$confidence = max($confidence, 0.82);
-			$reasons[] = 'leading request wrapper';
-		}
+		// 1. Conversation/tone cleanup. These remove wrappers around intent
+		// without changing the PBX object/action being requested.
+		self::applyRuleGroup($work, self::requestWrapperRules(), $confidence, $risk, $reasons);
+		self::applyRuleGroup($work, self::inlinePolitenessRules(), $confidence, $risk, $reasons);
 
-		// 2. Strip mid-sentence politeness or tone markers that are always safe to drop.
-		$inline = [
-			'/\b(please|pls|plz)\b/i',
-			'/\b(for\s+me|if\s+you\s+can)\b/i',
-		];
-		$before = $work;
-		$work = preg_replace($inline, '', $work);
-		if ($work !== $before) {
-			$confidence = max($confidence, 0.80);
-			$reasons[] = 'inline politeness';
-		}
-
-		// 2a. Strip rude/urgent/emotional phrasing so we can recover the real command.
 		$before = $work;
 		$work = self::expandTonePhrases($work);
 		if ($work !== $before) {
-			$confidence = max($confidence, $work === 'help' ? 0.93 : 0.78);
-			$risk = $work === 'help' ? self::RISK_READ : $risk;
-			$reasons[] = 'tone wrapper';
+			self::markRewrite($confidence, $risk, $reasons, $work === 'help' ? 0.93 : 0.78, $work === 'help' ? self::RISK_READ : null, 'tone wrapper');
 		}
 
-		// 2b. Strip trailing urgency/tone markers that otherwise get captured as
-		// names or labels by strict parser patterns.
+		$before = $work;
+		$work = self::stripAssistantAbuse($work);
+		if ($work !== $before) {
+			self::markRewrite($confidence, $risk, $reasons, 0.78, null, 'assistant-directed abuse');
+		}
+
 		$before = $work;
 		$work = self::stripTrailingTone($work);
 		if ($work !== $before) {
-			$confidence = max($confidence, 0.84);
-			$reasons[] = 'trailing urgency';
+			self::markRewrite($confidence, $risk, $reasons, 0.84, null, 'trailing urgency');
 		}
 
-		// 2c. Normalise common spellings before intent rewrites.
-		$spellings = [
-			'/\be-mail\b/i'      => 'email',
-			'/\bcall\s*forward\b/i' => 'call forward',
-			'/\bfollow\s+me\b/i' => 'followme',
-		];
-		foreach ($spellings as $pattern => $replacement) {
-			$before = $work;
-			$work = preg_replace($pattern, $replacement, $work);
-			if ($work !== $before) {
-				$confidence = max($confidence, 0.86);
-				$reasons[] = 'spelling normalisation';
-			}
-		}
+		// 2. Vocabulary normalisation. These make user wording look like
+		// phrases the strict parser already understands.
+		self::applyRuleGroup($work, self::spellingRules(), $confidence, $risk, $reasons);
+		self::applyRuleGroup($work, self::phrasalVerbRules(), $confidence, $risk, $reasons);
 
-		// 3. Phrasal verbs → single-word equivalents the strict patterns know.
-		//    Safe global replacements — these phrases don't have other meanings.
-		$phrasals = [
-			'/\b(have\s+a\s+look\s+at|take\s+a\s+look\s+at|look\s+at)\b/i' => 'show',
-			'/\b(get\s+me|pull\s+up|bring\s+up|find\s+me)\b/i'             => 'show',
-			'/\b(sort\s+out|deal\s+with|take\s+care\s+of)\b/i'             => 'fix',
-			'/\b(spin\s+up|stand\s+up|provision)\b/i'                       => 'create',
-			'/\b(decommission|retire)\b/i'                                  => 'delete',
-			'/\b(turn\s+on|switch\s+on)\b/i'                                => 'enable',
-			'/\b(turn\s+off|switch\s+off|shut\s+down|shut\s+off)\b/i'       => 'disable',
-			'/\b(reboot|bounce|cycle)\b/i'                                  => 'restart',
-		];
-		foreach ($phrasals as $pattern => $replacement) {
-			$before = $work;
-			$work = preg_replace($pattern, $replacement, $work);
-			if ($work !== $before) {
-				$confidence = max($confidence, 0.72);
-				$risk = self::RISK_UNKNOWN;
-				$reasons[] = 'phrasal verb';
-			}
-		}
-
-		// 3a. Viewer phrasing that maps cleanly to existing strict anchors.
-		$viewPhrases = [
-			'/^\s*(show|get|check)\s+me\s+/i' => '$1 ',
-			'/^\s*(what\'?s|what\s+is)\s+(?:the\s+)?(ext|extension)\s+(\d{3,6})\s*$/i' => 'show extension $3',
-			'/^\s*(ext|extension)\s+(\d{3,6})\s*$/i' => 'show extension $2',
-			'/^\s*(who\'?s|who\s+is)\s+on\s+(?:the\s+)?phone\s*$/i' => 'who is on the phone',
-			'/^\s*(current|live)\s+call\s+activity\s*$/i' => 'current calls',
-		];
-		foreach ($viewPhrases as $pattern => $replacement) {
-			$before = $work;
-			$work = preg_replace($pattern, $replacement, $work);
-			if ($work !== $before) {
-				$confidence = max($confidence, 0.91);
-				$risk = self::RISK_READ;
-				$reasons[] = 'viewer phrase';
-			}
-		}
-
-		// 4. State-of-the-user phrases -> PBX actions.
-		//    Anchored to "<extension> is <state>" so bare "sick" or "left"
-		//    in unrelated phrases doesn't fire.
+		// 3. Intent rewrites. These are stricter, usually anchored, and should
+		// land directly on known ChatParser command shapes.
+		self::applyRuleGroup($work, self::viewerPhraseRules(), $confidence, $risk, $reasons);
 		$before = $work;
 		$work = self::expandStatePhrases($work);
 		if ($work !== $before) {
-			$confidence = max($confidence, 0.94);
-			$risk = self::RISK_STATE;
-			$reasons[] = 'extension state phrase';
+			self::markRewrite($confidence, $risk, $reasons, 0.94, self::RISK_STATE, 'extension state phrase');
 		}
 
-		// 4a. Remove conversational punctuation without damaging values like
-		// emails, IPs, phone numbers, or channel names.
+		// 4. Final cleanup preserves structured values, then command-shape
+		// scoring decides whether the rewrite is safe enough to run.
 		$work = self::stripPunctuationNoise($work);
-
-		// 5. Collapse whitespace left behind by stripping.
 		$work = preg_replace('/\s+/', ' ', trim($work));
-
-		// 5a. Trim trailing punctuation and whitespace.
 		$work = trim($work);
 
 		// Only return if we changed something meaningful.
@@ -294,6 +218,78 @@ class Interpret {
 			];
 		}
 		return null;
+	}
+
+	private static function applyRuleGroup(&$work, $rules, &$confidence, &$risk, &$reasons) {
+		foreach ($rules as $rule) {
+			$before = $work;
+			$work = preg_replace($rule['pattern'], $rule['replacement'], $work);
+			if ($work !== $before) {
+				self::markRewrite(
+					$confidence,
+					$risk,
+					$reasons,
+					$rule['confidence'],
+					$rule['risk'] ?? null,
+					$rule['reason']
+				);
+			}
+		}
+	}
+
+	private static function markRewrite(&$confidence, &$risk, &$reasons, $newConfidence, $newRisk, $reason) {
+		$confidence = max($confidence, $newConfidence);
+		if ($newRisk !== null) {
+			$risk = $newRisk;
+		}
+		$reasons[] = $reason;
+	}
+
+	private static function requestWrapperRules() {
+		return [
+			['pattern' => '/^\s*(please|pls|plz)\s+/i', 'replacement' => '', 'confidence' => 0.82, 'reason' => 'leading request wrapper'],
+			['pattern' => '/^\s*(could\s+you|can\s+you|would\s+you)\s+/i', 'replacement' => '', 'confidence' => 0.82, 'reason' => 'leading request wrapper'],
+			['pattern' => '/^\s*(i\s+need\s+to|i\s+want\s+to|i\s+would\s+like\s+to|i\'?d\s+like\s+to)\s+/i', 'replacement' => '', 'confidence' => 0.82, 'reason' => 'leading request wrapper'],
+			['pattern' => '/^\s*just\s+/i', 'replacement' => '', 'confidence' => 0.82, 'reason' => 'leading request wrapper'],
+		];
+	}
+
+	private static function inlinePolitenessRules() {
+		return [
+			['pattern' => '/\b(please|pls|plz)\b/i', 'replacement' => '', 'confidence' => 0.80, 'reason' => 'inline politeness'],
+			['pattern' => '/\b(for\s+me|if\s+you\s+can)\b/i', 'replacement' => '', 'confidence' => 0.80, 'reason' => 'inline politeness'],
+		];
+	}
+
+	private static function spellingRules() {
+		return [
+			['pattern' => '/\be-mail\b/i', 'replacement' => 'email', 'confidence' => 0.86, 'reason' => 'spelling normalisation'],
+			['pattern' => '/\bcall\s*forward\b/i', 'replacement' => 'call forward', 'confidence' => 0.86, 'reason' => 'spelling normalisation'],
+			['pattern' => '/\bfollow\s+me\b/i', 'replacement' => 'followme', 'confidence' => 0.86, 'reason' => 'spelling normalisation'],
+		];
+	}
+
+	private static function phrasalVerbRules() {
+		return [
+			['pattern' => '/\b(have\s+a\s+look\s+at|take\s+a\s+look\s+at|look\s+at)\b/i', 'replacement' => 'show', 'confidence' => 0.72, 'risk' => self::RISK_UNKNOWN, 'reason' => 'phrasal verb'],
+			['pattern' => '/\b(get\s+me|pull\s+up|bring\s+up|find\s+me)\b/i', 'replacement' => 'show', 'confidence' => 0.72, 'risk' => self::RISK_UNKNOWN, 'reason' => 'phrasal verb'],
+			['pattern' => '/\b(sort\s+out|deal\s+with|take\s+care\s+of)\b/i', 'replacement' => 'fix', 'confidence' => 0.72, 'risk' => self::RISK_UNKNOWN, 'reason' => 'phrasal verb'],
+			['pattern' => '/\b(spin\s+up|stand\s+up|provision)\b/i', 'replacement' => 'create', 'confidence' => 0.72, 'risk' => self::RISK_UNKNOWN, 'reason' => 'phrasal verb'],
+			['pattern' => '/\b(decommission|retire)\b/i', 'replacement' => 'delete', 'confidence' => 0.72, 'risk' => self::RISK_UNKNOWN, 'reason' => 'phrasal verb'],
+			['pattern' => '/\b(turn\s+on|switch\s+on)\b/i', 'replacement' => 'enable', 'confidence' => 0.72, 'risk' => self::RISK_UNKNOWN, 'reason' => 'phrasal verb'],
+			['pattern' => '/\b(turn\s+off|switch\s+off|shut\s+down|shut\s+off)\b/i', 'replacement' => 'disable', 'confidence' => 0.72, 'risk' => self::RISK_UNKNOWN, 'reason' => 'phrasal verb'],
+			['pattern' => '/\b(reboot|bounce|cycle)\b/i', 'replacement' => 'restart', 'confidence' => 0.72, 'risk' => self::RISK_UNKNOWN, 'reason' => 'phrasal verb'],
+		];
+	}
+
+	private static function viewerPhraseRules() {
+		return [
+			['pattern' => '/^\s*(show|get|check)\s+me\s+/i', 'replacement' => '$1 ', 'confidence' => 0.91, 'risk' => self::RISK_READ, 'reason' => 'viewer phrase'],
+			['pattern' => '/^\s*(what\'?s|what\s+is)\s+(?:the\s+)?(ext|extension)\s+(\d{3,6})\s*$/i', 'replacement' => 'show extension $3', 'confidence' => 0.91, 'risk' => self::RISK_READ, 'reason' => 'viewer phrase'],
+			['pattern' => '/^\s*(ext|extension)\s+(\d{3,6})\s*$/i', 'replacement' => 'show extension $2', 'confidence' => 0.91, 'risk' => self::RISK_READ, 'reason' => 'viewer phrase'],
+			['pattern' => '/^\s*(who\'?s|who\s+is)\s+on\s+(?:the\s+)?phone\s*$/i', 'replacement' => 'who is on the phone', 'confidence' => 0.91, 'risk' => self::RISK_READ, 'reason' => 'viewer phrase'],
+			['pattern' => '/^\s*(current|live)\s+call\s+activity\s*$/i', 'replacement' => 'current calls', 'confidence' => 0.91, 'risk' => self::RISK_READ, 'reason' => 'viewer phrase'],
+		];
 	}
 
 	private static function scoreCommandShape($msg) {
@@ -336,7 +332,7 @@ class Interpret {
 		// like "just", "now", and "please" are left alone mid-sentence because
 		// they can be meaningful in entity names or search text.
 		$inlines = [
-			'/\b(fucking|damn|bloody|goddamn|shit|hell|bastard|son\s+of\s+a\s+bitch)\b/i',
+			'/\b(fucking|damn|bloody|goddamn|shit|hell|bastard|son\s+of\s+a\s+bitch|bitch)\b/i',
 		];
 		foreach ($inlines as $pattern) {
 			$work = preg_replace($pattern, '', $work);
@@ -355,6 +351,24 @@ class Interpret {
 		}
 
 		return $work;
+	}
+
+	/**
+	 * Remove insults aimed at the assistant, not potentially meaningful
+	 * descriptors attached to PBX objects.
+	 */
+	private static function stripAssistantAbuse($msg) {
+		$work = $msg;
+		$insults = '(?:idiot|moron|twat|cunt|prick|wanker|dumbass|dumb\s+ass|clown|fool|shitbot|useless\s+(?:bot|machine|thing)|stupid\s+(?:bot|machine|thing))';
+		$patterns = [
+			'/^\s*(?:you(?:\'re|re| are)?\s+)?' . $insults . '[.!?,-]*\s*/i',
+			'/^\s*(?:you(?:\'re|re| are)\s+)?(?:bloody|fucking|damn|goddamn)\s+' . $insults . '[.!?,-]*\s*/i',
+			'/[\s,]+(?:you(?:\'re|re| are)?\s+)?' . $insults . '\s*$/',
+		];
+		foreach ($patterns as $pattern) {
+			$work = preg_replace($pattern, ' ', $work);
+		}
+		return preg_replace('/\s+/', ' ', trim($work));
 	}
 
 	/**
