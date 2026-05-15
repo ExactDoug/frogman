@@ -154,10 +154,15 @@ class Interpret {
 	 */
 	private static function interpretLocal($msg) {
 		$original = $msg;
-		$work = $msg;
-		$confidence = 0.70;
-		$risk = self::RISK_READ;
-		$reasons = [];
+        $work = trim($msg);
+
+        if (preg_match('/^`(.+)`$/s', $work, $m)) {
+	    $work = trim($m[1]);
+        }
+
+        $confidence = 0.70;
+        $risk = self::RISK_READ;
+        $reasons = [];
 
 		// 1. Conversation/tone cleanup. These remove wrappers around intent
 		// without changing the PBX object/action being requested.
