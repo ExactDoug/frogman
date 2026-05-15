@@ -28,7 +28,7 @@ class Chat extends Command {
 		$output->writeln('');
 
 		while (true) {
-			$line = readline("\033[36mfrogman>\033[0m ");
+			$line = readline('frogman> ');
 			if ($line === false) break; // Ctrl+D
 
 			$line = trim($line);
