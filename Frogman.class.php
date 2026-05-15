@@ -2338,7 +2338,7 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 		}
 		foreach (glob($dir . '/*.php') as $file) {
 			$basename = basename($file, '.php');
-			if ($basename === 'AbstractTool' || $basename === 'ChatParser') {
+			if ($basename === 'AbstractTool' || $basename === 'ChatParser' || $basename === 'Interpret') {
 				continue;
 			}
 			require_once $file;
