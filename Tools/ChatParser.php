@@ -173,7 +173,7 @@ class ChatParser {
 
 		// Apply user input to current step (if any)
 		if ($userInput !== null) {
-			if (preg_match('/^(cancel|abort|stop)$/i', $userInput)) {
+			if (preg_match('/^(cancel|abort|stop)$/i', $userInput) || Interpret::isCorrectionCancel($userInput)) {
 				self::clearPending($sessionId);
 				return ['response' => 'Cancelled.'];
 			}
@@ -393,11 +393,17 @@ class ChatParser {
 		$inputPending = self::getInputPending($sessionId);
 		if ($inputPending) {
 			$isSkip = (bool)preg_match('/^(no|cancel|skip|nevermind|nope|abort)$/i', $msg);
+			$isCorrectionCancel = Interpret::isCorrectionCancel($msg);
 			$isWizard = ($inputPending['type'] ?? 'input') === 'wizard';
 			$isMacro = ($inputPending['type'] ?? 'input') === 'macro';
 
 			if ($isMacro) {
 				return self::advanceMacro($sessionId, $msg);
+			}
+
+			if ($isCorrectionCancel) {
+				self::clearPending($sessionId);
+				return ['response' => 'OK, cancelled. Try again with the command you want.'];
 			}
 
 			if ($isWizard) {
@@ -461,7 +467,7 @@ class ChatParser {
 			$pending['params']['confirm'] = true;
 			return ['tool' => $pending['tool'], 'params' => $pending['params']];
 		}
-		if ($pending && preg_match('/^(no|n|cancel|nevermind|nope|nah|abort)$/i', $msg)) {
+		if ($pending && (preg_match('/^(no|n|cancel|nevermind|nope|nah|abort)$/i', $msg) || Interpret::isCorrectionCancel($msg))) {
 			self::clearPending($sessionId);
 			$isFollowUp = !empty($pending['type']) && $pending['type'] === 'followup';
 			return ['response' => $isFollowUp ? 'OK, no problem.' : 'Cancelled.'];

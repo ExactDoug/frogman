@@ -47,6 +47,36 @@ class Interpret {
 	}
 
 	/**
+	 * True when the user is explicitly saying the pending action is wrong.
+	 * ChatParser calls this before wizard/confirmation text is consumed as input.
+	 */
+	public static function isCorrectionCancel($msg) {
+		$work = trim($msg);
+		$work = self::stripPunctuationNoise($work);
+		$work = preg_replace('/\s+/', ' ', trim($work));
+
+		$patterns = [
+			'/^(?:no\s*){2,}$/i',
+			'/^(?:no+\s+)+no+$/i',
+			'/^(?:no\s+thanks|no\s+thank\s+you|not\s+now)$/i',
+			'/^(?:no\s+)?(?:you|u)\s+mis+understood$/i',
+			'/^(?:that(?:\'s|s| is)\s+)?not\s+what\s+i\s+mea?nt$/i',
+			'/^(?:i\s+didn\'?t|i\s+didnt)\s+mea?nt?\s+(?:that|this)$/i',
+			'/^(?:not\s+what\s+i\s+asked|not\s+what\s+i\s+wanted)$/i',
+			'/^(?:that(?:\'s|s| is)\s+)?(?:the\s+)?wrong\s+(?:thing|command|one)$/i',
+			'/^stop\s+(?:that(?:\'s|s| is)\s+)?wrong$/i',
+			'/^don\'?t\s+do\s+that$/i',
+			'/^cancel\s+that$/i',
+		];
+		foreach ($patterns as $pattern) {
+			if (preg_match($pattern, $work)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Read the interpret mode from Frogman's FreePBX module config store.
 	 * Defaults to 'local'.
 	 * Admins can disable by setting it to 'off'.
