@@ -273,6 +273,68 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 	}
 
 	/**
+	 * Sanitize a free-form field value before interpolating it into chat output
+	 * that will be wrapped in inline-code backticks. The client's formatMarkdown
+	 * applies escapeHtml only INSIDE its capture groups (backticks, bold, links);
+	 * prose text between patterns is rendered as raw HTML. Wrapping a user-
+	 * controlled value in backticks engages the escape — but a literal backtick
+	 * in the value would let the user break out of the inline-code wrapping, so
+	 * we strip backticks here. Control chars are also stripped defensively.
+	 *
+	 * Pattern: $line = "Field `" . $this->sanitizeForChat($value) . "`";
+	 *
+	 * Background: GHSA-7qvv (v1.6.6) patched escape-on-capture for the known
+	 * markdown patterns, but prose-between-patterns in the chat formatter is
+	 * still raw-HTML territory. Any new formatter case that interpolates a
+	 * free-form field must use this helper + backtick wrapping.
+	 */
+	private function sanitizeForChat($value) {
+		$value = (string)$value;
+		// Strip control chars (CRLF, NUL, etc.) — could disrupt rendering or
+		// be used to inject markup pieces.
+		$value = preg_replace('/[\x00-\x1F\x7F]/', '', $value);
+		// Neutralize characters that could break out of inline-code wrapping
+		// OR trigger client-side formatMarkdown patterns that user-controlled
+		// fields must not invoke:
+		//   `   closes inline-code wrapping (XSS via prose interpolation)
+		//   {{  triggers {{cmd:...|...}} / {{download:...|...}} clickable
+		//       command patterns — UX confusion / indirect command execution
+		//       (e.g. an admin renders a chat audit and sees a fake clickable
+		//       "harmless click" that actually fires `delete extension 101`)
+		//   [   triggers `[text](url)` markdown link pattern — phishing-ish,
+		//       embeds a clickable link in admin chat
+		return str_replace(['`', '{{', '['], ["'", '{ {', '('], $value);
+	}
+
+	/**
+	 * Map a severity label to a visual icon for chat rendering.
+	 * Used by the fm_audit_* formatter cases.
+	 */
+	private function severityIcon($severity) {
+		switch ($severity) {
+			case 'critical': return '🚨';
+			case 'high':     return '🔴';
+			case 'medium':   return '🟡';
+			case 'info':     return 'ℹ️';
+			default:         return '•';
+		}
+	}
+
+	/**
+	 * Return the highest severity present in a severity_counts array, or
+	 * null if all counts are zero. Used by fm_audit_posture to pick an icon
+	 * for each sub-audit's roll-up line.
+	 */
+	private function topSeverity($counts) {
+		foreach (['critical', 'high', 'medium', 'info'] as $sev) {
+			if (!empty($counts[$sev]) && (int)$counts[$sev] > 0) {
+				return $sev;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Format a tool result into readable chat text.
 	 */
 	public function formatToolResult($toolName, $result, $sessionId) {
@@ -563,6 +625,104 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 				foreach ($data['entries'] as $e) {
 					$ts = $e['created_at_human'] ?? date('H:i:s', $e['created_at']);
 					$lines[] = "  {$ts} | {$e['tool']} | {$e['status']}";
+				}
+				return implode("\n", $lines);
+
+			// Note on safety: every interpolated user-controlled field below is
+			// wrapped in backticks AND passed through sanitizeForChat() first.
+			// Backticks engage chat.js::formatMarkdown's escape-on-capture path;
+			// sanitizeForChat strips literal backticks so the user can't break
+			// out of the inline-code wrapping. Static Frogman strings (issue,
+			// recommendation, tool names) are interpolated raw because they're
+			// not user-controlled. See sanitizeForChat()'s docblock above.
+
+			case 'fm_audit_voicemail_pins':
+				if (empty($data['findings'])) {
+					return "✅ **Voicemail PIN Audit** — No weak voicemail PINs found.";
+				}
+				$lines = ["**Voicemail PIN Audit** — {$data['summary']}", ''];
+				foreach ($data['findings'] as $f) {
+					$icon = $this->severityIcon($f['severity']);
+					$mbox = $this->sanitizeForChat($f['mailbox']);
+					$nameSan = $f['name'] !== '' ? " (`" . $this->sanitizeForChat($f['name']) . "`)" : '';
+					$lines[] = "  {$icon} Mailbox `{$mbox}`{$nameSan} — {$f['issue']}";
+				}
+				$lines[] = '';
+				$lines[] = "→ Set non-default PINs of 6+ digits via the Voicemail module.";
+				return implode("\n", $lines);
+
+			case 'fm_audit_extension_secrets':
+				if (empty($data['findings'])) {
+					return "✅ **Extension Secret Audit** — No weak extension secrets found.";
+				}
+				$lines = ["**Extension Secret Audit** — {$data['summary']}", ''];
+				foreach ($data['findings'] as $f) {
+					$icon = $this->severityIcon($f['severity']);
+					$ext = $this->sanitizeForChat($f['extension']);
+					$nameSan = $f['name'] !== '' ? " (`" . $this->sanitizeForChat($f['name']) . "`)" : '';
+					$tech = $this->sanitizeForChat($f['tech']);
+					$lines[] = "  {$icon} Extension `{$ext}`{$nameSan} [`{$tech}`] — {$f['issue']}";
+				}
+				$lines[] = '';
+				$lines[] = "→ Set high-entropy secrets (16+ mixed-case alphanumeric) via the Core module.";
+				return implode("\n", $lines);
+
+			case 'fm_audit_orphan_dids':
+				if (empty($data['findings'])) {
+					return "✅ **Orphan DID Audit** — No orphaned inbound routes found.";
+				}
+				$lines = ["**Orphan DID Audit** — {$data['summary']}", ''];
+				foreach ($data['findings'] as $f) {
+					$icon = $this->severityIcon($f['severity']);
+					$did = $this->sanitizeForChat($f['did']);
+					$cid = $this->sanitizeForChat($f['cid']);
+					$desc = $f['description'] !== '' ? " — `" . $this->sanitizeForChat($f['description']) . "`" : '';
+					$dest = $this->sanitizeForChat($f['destination']);
+					$lines[] = "  {$icon} DID `{$did}` / CID `{$cid}`{$desc}";
+					$lines[] = "      Destination: `{$dest}`";
+					$lines[] = "      Issue: {$f['issue']}";
+				}
+				return implode("\n", $lines);
+
+			case 'fm_audit_outbound_international':
+				if (empty($data['findings'])) {
+					return "✅ **International Dial Audit** — No outbound routes with international dial patterns found.";
+				}
+				$lines = ["**International Dial Audit** — {$data['summary']}", ''];
+				foreach ($data['findings'] as $f) {
+					$icon = $this->severityIcon($f['severity']);
+					$rid = $this->sanitizeForChat($f['route_id']);
+					$nameSan = $f['route_name'] !== '' ? " `" . $this->sanitizeForChat($f['route_name']) . "`" : '';
+					$prefix = $this->sanitizeForChat($f['prefix']);
+					$matchPat = $this->sanitizeForChat($f['match_pattern']);
+					$lines[] = "  {$icon} Route `{$rid}`{$nameSan} — matches international prefix `{$f['international_prefix_detected']}`";
+					$lines[] = "      Prefix: `{$prefix}`  Match pattern: `{$matchPat}`";
+				}
+				$lines[] = '';
+				$lines[] = "→ Restrict with a route password or extension allowlist via Outbound Routes.";
+				return implode("\n", $lines);
+
+			case 'fm_audit_posture':
+				$lines = ["**Posture Audit** — {$data['summary']}", ''];
+				foreach ($data['audits'] as $a) {
+					$top = $this->topSeverity($a['severity_counts']);
+					$icon = $a['count'] > 0 && $top !== null ? $this->severityIcon($top) : '✅';
+					// tool, summary, drilldown_phrase are Frogman-controlled
+					// constants — not user input. Safe to interpolate raw.
+					$lines[] = "  {$icon} `{$a['tool']}` — {$a['summary']}";
+					if ($a['count'] > 0) {
+						$lines[] = "      Drill down: {{cmd:{$a['drilldown_phrase']}|🔍 {$a['drilldown_phrase']}}}";
+					}
+				}
+				if (!empty($data['failed_audits'])) {
+					$lines[] = '';
+					$lines[] = "**Errored audits:**";
+					foreach ($data['failed_audits'] as $err) {
+						// Exception messages can echo user-controlled context;
+						// sanitize + wrap defensively.
+						$errMsg = $this->sanitizeForChat($err['error']);
+						$lines[] = "  ⚠️ `{$err['tool']}` — `{$errMsg}`";
+					}
 				}
 				return implode("\n", $lines);
 

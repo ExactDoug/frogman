@@ -1101,6 +1101,9 @@ class ChatParser {
 		if (preg_match('/^(audit|check|find)\s+(outbound\s+)?international(\s+(dialing|routes?))?$/i', $lower)) {
 			return ['tool' => 'fm_audit_outbound_international', 'params' => []];
 		}
+		if (preg_match('/^(audit|check)\s+(all|posture|security)$/i', $lower) || preg_match('/^security\s+check$/i', $lower) || preg_match('/^posture(\s+check|\s+report)?$/i', $lower)) {
+			return ['tool' => 'fm_audit_posture', 'params' => []];
+		}
 
 		// ── Misc Destinations ──
 		if (preg_match('/^(list|show)\s+(misc\s+)?(dest|destinations?)$/i', $lower)) {
@@ -2023,6 +2026,7 @@ class ChatParser {
   `audit extension secrets` — find extensions with weak SIP passwords
   `audit orphan dids` — find inbound routes with no destination
   `audit international` — find outbound routes that allow international dialing
+  `audit all` / `audit posture` / `security check` — run every audit and return a consolidated posture report
   `repair userman` / `fix ucp logins` — restore default-group + assigned wiring for UCP login
   `repair userman <ext>` — repair just one extension
   `reset password for <user>` — reset a User Manager password

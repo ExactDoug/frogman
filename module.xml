@@ -1,13 +1,15 @@
 <module>
 	<rawname>frogman</rawname>
 	<name>Frogman</name>
-	<version>1.7.0</version>
+	<version>1.7.1</version>
 	<publisher>Frogman Project</publisher>
 	<license>AGPLv3</license>
 	<licenselink>https://www.gnu.org/licenses/agpl-3.0.txt</licenselink>
 	<category>Admin</category>
 	<description>Complete PBX control through natural language from a web console, chat platforms, MCP, or any API client. 220 tools built entirely on FreePBX's native interfaces (BMO, GraphQL, AMI, fwconsole).</description>
 	<changelog><![CDATA[
+		*1.7.1* Posture meta-tool + chat-formatter hardening. New tool fm_audit_posture runs every fm_audit_* compliance check and returns a consolidated report card (total findings, severity rollup, per-audit summary, clickable drill-down phrase). New chat-formatter cases for the five audit tools render findings with severity icons + backtick-wrapped target IDs. Hardening: new sanitizeForChat() helper in Frogman.class.php strips backticks, control chars (CRLF/NUL), and the `{{` / `[` lead-in characters that would otherwise trigger client-side formatMarkdown patterns ({{cmd:}}, {{download:}}, [text](url)) — closes the prose-interpolation gap that GHSA-7qvv's fix left open for any future formatter case that interpolates user-controlled fields. Verified against six injection vectors (script tag, backtick breakout, CRLF, {{cmd:}}, [link](url), bold) — all neutralized server-side before the chat client sees them. Chat phrases: `audit all`, `audit posture`, `security check`. 225 tools, +1.
+
 		*1.7.0* Compliance audit tools — Tier 1 of the toll-fraud chain. Four new read-only `fm_audit_*` tools that report posture without changing config: fm_audit_voicemail_pins (mailboxes with weak/default PINs: empty, equals mailbox number, common defaults, repeating digits, sequential, sub-4-digit), fm_audit_extension_secrets (extensions with empty/default/short/low-entropy SIP secrets — secret values are never returned), fm_audit_orphan_dids (inbound routes with no destination set, plus catchall route detection as info-level finding), fm_audit_outbound_international (outbound routes with dial patterns starting 011/0011/00 — the international-prefix toll-fraud surface). All four are PERM_ADMIN, all four use BMO methods only (Voicemail->getVoicemail, Core->getAllDevicesByType + getDevice, Core->getAllDIDs, Core->getAllRoutes + getRoutePatternsByID — no direct writes, no commercial-module dependencies). Chat phrases: `audit voicemail pins`, `audit extension secrets`, `audit orphan dids`, `audit international`. Each tool returns count + severity_counts + findings array + one-line summary. Findings sorted by severity descending, ties broken by natural-sort of the target identifier. 224 tools, +4.
 
 		*1.6.9* CI-only patch release. The release workflow now uses `fetch-tags: true` on the checkout step so the annotated tag object is actually downloaded; previously the workflow pulled the commit (`--no-tags +<sha>:refs/tags/<name>`) which left the local ref as a lightweight tag, and `for-each-ref %(contents)` returned the commit message instead of the tag annotation. v1.6.8 shipped with its commit subject as the release body; this fixes that. No code changes; no user-visible behaviour change.
