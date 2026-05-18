@@ -1088,6 +1088,20 @@ class ChatParser {
 			return ['tool' => 'fm_audit_search', 'params' => $params];
 		}
 
+		// ── Security Audits (toll-fraud chain) ──
+		if (preg_match('/^(audit|check|find)\s+(weak\s+)?(voicemail|vm)\s+(pins?|passwords?)$/i', $lower)) {
+			return ['tool' => 'fm_audit_voicemail_pins', 'params' => []];
+		}
+		if (preg_match('/^(audit|check|find)\s+(weak\s+)?(extension|ext|sip)\s+(secrets?|passwords?)$/i', $lower)) {
+			return ['tool' => 'fm_audit_extension_secrets', 'params' => []];
+		}
+		if (preg_match('/^(audit|check|find)\s+(orphan|unrouted|missing)\s+(dids?|inbound\s+routes?|destinations?)$/i', $lower)) {
+			return ['tool' => 'fm_audit_orphan_dids', 'params' => []];
+		}
+		if (preg_match('/^(audit|check|find)\s+(outbound\s+)?international(\s+(dialing|routes?))?$/i', $lower)) {
+			return ['tool' => 'fm_audit_outbound_international', 'params' => []];
+		}
+
 		// ── Misc Destinations ──
 		if (preg_match('/^(list|show)\s+(misc\s+)?(dest|destinations?)$/i', $lower)) {
 			return ['tool' => 'fm_list_misc_dests', 'params' => []];
@@ -2005,6 +2019,10 @@ class ChatParser {
   `asterisk info` / `uptime` / `sys info` / `system info`
   `show sip settings` / `show firewall`
   `audit <n>`
+  `audit voicemail pins` — find mailboxes with weak/default PINs
+  `audit extension secrets` — find extensions with weak SIP passwords
+  `audit orphan dids` — find inbound routes with no destination
+  `audit international` — find outbound routes that allow international dialing
   `repair userman` / `fix ucp logins` — restore default-group + assigned wiring for UCP login
   `repair userman <ext>` — repair just one extension
   `reset password for <user>` — reset a User Manager password
