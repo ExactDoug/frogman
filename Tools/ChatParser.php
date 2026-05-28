@@ -920,6 +920,42 @@ class ChatParser {
 		if (preg_match('/^(show|get)\s+(outbound\s+)?route\s+(\d+)$/i', $msg, $m)) {
 			return ['tool' => 'fm_get_outbound_route', 'params' => ['id' => $m[3]]];
 		}
+		// One-shot add: "add outbound route NAME trunk TRUNK pattern PATTERN"
+		// Trunk can be ID or name; pattern accepts pipe-form ("9|NXXNXXXXXX") or plain ("1NXXNXXXXXX").
+		// Multi-pattern / multi-trunk / PIN / CID setups go through MCP/JSON, not chat.
+		if (preg_match('/^(add|create)\s+outbound\s+route\s+(\S+)\s+(?:via\s+|using\s+)?trunk\s+(\S+)\s+(?:with\s+)?patterns?\s+(.+)$/i', $msg, $m)) {
+			$params = [
+				'name' => $m[2],
+				'trunks' => [$m[3]],
+				'patterns' => [['match' => trim($m[4])]],
+			];
+			self::setPending($sessionId, 'fm_add_outbound_route', $params);
+			return ['tool' => 'fm_add_outbound_route', 'params' => $params];
+		}
+		// Delete: "remove outbound route NAME" / "delete outbound route NAME"
+		if (preg_match('/^(remove|delete)\s+outbound\s+route\s+(.+)$/i', $msg, $m)) {
+			$params = ['route_name' => trim($m[2])];
+			self::setPending($sessionId, 'fm_remove_outbound_route', $params);
+			return ['tool' => 'fm_remove_outbound_route', 'params' => $params];
+		}
+		// Add pattern with prepend: "add pattern PATTERN prepend DIGITS to ROUTE"
+		if (preg_match('/^(add|create)\s+patterns?\s+(\S+)\s+prepend\s+(\S+)\s+to\s+(.+)$/i', $msg, $m)) {
+			$params = ['route_name' => trim($m[4]), 'match' => $m[2], 'prepend' => $m[3]];
+			self::setPending($sessionId, 'fm_add_outbound_pattern', $params);
+			return ['tool' => 'fm_add_outbound_pattern', 'params' => $params];
+		}
+		// Add pattern simple: "add pattern PATTERN to ROUTE"
+		if (preg_match('/^(add|create)\s+patterns?\s+(\S+)\s+to\s+(.+)$/i', $msg, $m)) {
+			$params = ['route_name' => trim($m[3]), 'match' => $m[2]];
+			self::setPending($sessionId, 'fm_add_outbound_pattern', $params);
+			return ['tool' => 'fm_add_outbound_pattern', 'params' => $params];
+		}
+		// Remove pattern: "remove pattern PATTERN from ROUTE"
+		if (preg_match('/^(remove|delete)\s+patterns?\s+(\S+)\s+from\s+(.+)$/i', $msg, $m)) {
+			$params = ['route_name' => trim($m[3]), 'match' => $m[2]];
+			self::setPending($sessionId, 'fm_remove_outbound_pattern', $params);
+			return ['tool' => 'fm_remove_outbound_pattern', 'params' => $params];
+		}
 
 		// ── Queues ──
 		if (preg_match('/^(list|show)\s+(all\s+)?queues?$/i', $lower)) {
@@ -1985,6 +2021,11 @@ class ChatParser {
   `list inbound routes` — all DIDs
   `list outbound routes` — all outbound routes
   `show outbound route <id>`
+  `add outbound route <name> trunk <trunk> pattern <pattern>` one-shot create
+  `remove outbound route <name>` delete (refuses 911/999/112 routes)
+  `add pattern <pattern> to <route>` append single pattern
+  `add pattern <pattern> prepend <digits> to <route>` append with dial-prepend
+  `remove pattern <pattern> from <route>` remove single pattern
 
 **Calls & CDR:**
   `active calls` — calls in progress
