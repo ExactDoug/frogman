@@ -1031,6 +1031,19 @@ class ChatParser {
 		if (preg_match('/^(show|get)\s+ivr\s+(\d+)$/i', $msg, $m)) {
 			return ['tool' => 'fm_get_ivr', 'params' => ['id' => $m[2]]];
 		}
+		// Rename IVR: "rename ivr ID to NEWNAME" — most common single-field update.
+		// Multi-field updates and entry changes go through MCP/JSON.
+		if (preg_match('/^rename\s+ivr\s+(\d+)\s+to\s+(.+)$/i', $msg, $m)) {
+			$params = ['id' => $m[1], 'name' => trim($m[2])];
+			self::setPending($sessionId, 'fm_update_ivr', $params);
+			return ['tool' => 'fm_update_ivr', 'params' => $params];
+		}
+		// Timeout-only update: "set ivr ID timeout to SECONDS"
+		if (preg_match('/^(set|update)\s+ivr\s+(\d+)\s+timeout\s+(?:to\s+)?(\d+)$/i', $msg, $m)) {
+			$params = ['id' => $m[2], 'timeout' => (int)$m[3]];
+			self::setPending($sessionId, 'fm_update_ivr', $params);
+			return ['tool' => 'fm_update_ivr', 'params' => $params];
+		}
 
 		// ── Announcements ──
 		if (preg_match('/^(list|show)\s+(all\s+)?announcements?$/i', $lower)) {
@@ -2089,6 +2102,8 @@ class ChatParser {
 
 **IVRs & Announcements:**
   `list ivrs` / `show ivr <id>`
+  `rename ivr <id> to <name>`
+  `set ivr <id> timeout to <seconds>`
   `list announcements`
 
 **Conferences & Paging:**
