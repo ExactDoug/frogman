@@ -1,5 +1,11 @@
 # Frogman — TODO
 
+## Verification follow-ups (post-deploy, on the FreePBX host)
+
+- [ ] **Verify `pm2 delete` chat routing** — the `delete` action on `fm_pm2_manage` + the `delete pm2|service|process <name>` ChatParser route were added without a local FreePBX/PHP env to test. On the host, run:
+  - `fwconsole frogman:tool fm_lint_typeahead '{}'` — confirm no parser↔typeahead gaps.
+  - `fwconsole frogman:tool fm_pm2_manage '{"action":"delete","name":"<proc>"}'` — confirm the dry-run preview (no `confirm:true`), then with `confirm:true` against a disposable process.
+
 ## High Priority
 
 - [ ] **Token-based auth for HTTP API** — Currently the HTTP tool endpoint relies on FreePBX session auth (localhost bypasses). Add bearer token support using the FreePBX API module's OAuth2 flow so external clients can authenticate without a browser session.

@@ -27,3 +27,7 @@ node_modules/
 # Internal review docs (audits, security reviews — not for public repo)
 docs/*-audit.md
 docs/*-internal.md
+
+# Local/private Claude notes (security context, dev shortcuts — never public)
+CLAUDE.local.md
+AGENT-COMMS.md
