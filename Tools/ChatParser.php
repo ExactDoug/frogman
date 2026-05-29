@@ -1768,7 +1768,7 @@ class ChatParser {
 		}
 
 		// ── PM2 manage ──
-		if (preg_match('/^(restart|stop)\s+(pm2|service|process)\s+(\S+)$/i', $msg, $m)) {
+		if (preg_match('/^(restart|stop|delete)\s+(pm2|service|process)\s+(\S+)$/i', $msg, $m)) {
 			$params = ['action' => strtolower($m[1]), 'name' => $m[3]];
 			self::setPending($sessionId, 'fm_pm2_manage', $params);
 			return ['tool' => 'fm_pm2_manage', 'params' => $params];
@@ -2199,6 +2199,7 @@ class ChatParser {
 
 **Services & License:**
   `show pm2` / `show license`
+  `restart pm2 <name>` / `stop pm2 <name>` / `delete pm2 <name>`
   `set external ip to <ip>`
   `fwconsole ma list`
   `update activation` / `refresh license` — refresh from Sangoma portal (Apache restarts ~10s)
