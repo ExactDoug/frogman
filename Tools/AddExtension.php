@@ -38,7 +38,9 @@ class AddExtension extends AbstractTool {
 		// exception in runTool's catch, or the userman 'failed:' notes on the success path).
 		$secret = $this->markSecret($params['secret'] ?? bin2hex(random_bytes(8)));
 		$vm = $params['vm'] ?? 'no';
-		$vmpwd = $params['vmpwd'] ?? '';
+		// SEC-3: vmpwd is forwarded into processQuickCreate()/voicemail — register it too so a
+		// downstream exception echoing it gets scrubbed. markSecret no-ops on the empty default.
+		$vmpwd = $this->markSecret($params['vmpwd'] ?? '');
 		$email = $params['email'] ?? '';
 		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
 

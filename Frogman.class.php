@@ -2954,6 +2954,12 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 
 		$auditId = $this->auditIntent($name, $params, $userId, $sessionId, $chatInput, $interpretedAs);
 
+		// Scope any markSecret() registrations to this single run — tools are cached
+		// singletons, so a stale scrub list would over-redact later calls.
+		if (method_exists($tool, 'resetSecrets')) {
+			$tool->resetSecrets();
+		}
+
 		try {
 			$result = $tool->execute($params, [
 				'userId' => $userId,

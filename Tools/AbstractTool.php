@@ -49,6 +49,16 @@ abstract class AbstractTool {
 	}
 
 	/**
+	 * Clear the registered-secret list. Tools are cached singletons (Frogman::loadTools),
+	 * so without this a secret marked in one call — e.g. a default PIN like '1234' — would
+	 * stay resident and over-redact unrelated output on later calls. runTool() calls this
+	 * before each execute() to scope the scrub list to a single run.
+	 */
+	public function resetSecrets() {
+		$this->secretsToScrub = [];
+	}
+
+	/**
 	 * Permission level required: 'read', 'write', or 'admin'.
 	 * Override in subclass. Default is 'read'.
 	 */
