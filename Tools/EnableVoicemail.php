@@ -14,7 +14,9 @@ class EnableVoicemail extends AbstractTool {
 	public function execute($params, $context) {
 		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
 		$ext = $params['ext'];
-		$pwd = $params['password'] ?? '1234';
+		// SEC-3: register the PIN so runTool's catch scrubs it from any downstream
+		// BMO exception (e.g. Voicemail->addMailbox()) before it reaches the LLM or audit log.
+		$pwd = $this->markSecret($params['password'] ?? '1234');
 		$user = $this->freepbx->Core->getUser($ext);
 		if (empty($user)) throw new \Exception("Extension {$ext} not found");
 		if (!$confirm) {

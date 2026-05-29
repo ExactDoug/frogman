@@ -2963,8 +2963,16 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 			$this->auditOutcome($auditId, 'success', $result);
 			return ['status' => 'success', 'auditId' => $auditId, 'data' => $result];
 		} catch (\Exception $e) {
-			$this->auditOutcome($auditId, 'error', $e->getMessage());
-			return ['status' => 'error', 'auditId' => $auditId, 'message' => $e->getMessage()];
+			// SEC-3 (error path): a downstream BMO exception can echo a secret the tool
+			// handled (e.g. a voicemail PIN or UCP password). Scrub registered secret
+			// values out of the message BEFORE it reaches either the audit log or the
+			// MCP/LLM response. auditOutcome() leaves string $detail un-redacted (it only
+			// redacts array keys), so pre-scrubbing here protects both sinks at once.
+			$msg = method_exists($tool, 'scrubKnownSecrets')
+				? $tool->scrubKnownSecrets($e->getMessage())
+				: $e->getMessage();
+			$this->auditOutcome($auditId, 'error', $msg);
+			return ['status' => 'error', 'auditId' => $auditId, 'message' => $msg];
 		}
 	}
 }
