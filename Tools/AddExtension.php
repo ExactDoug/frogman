@@ -34,9 +34,13 @@ class AddExtension extends AbstractTool {
 	public function execute($params, $context) {
 		$ext = $params['ext'];
 		$name = $params['name'];
-		$secret = $params['secret'] ?? bin2hex(random_bytes(8));
+		// SEC-3: register secrets so they're scrubbed from any error text (downstream
+		// exception in runTool's catch, or the userman 'failed:' notes on the success path).
+		$secret = $this->markSecret($params['secret'] ?? bin2hex(random_bytes(8)));
 		$vm = $params['vm'] ?? 'no';
-		$vmpwd = $params['vmpwd'] ?? '';
+		// SEC-3: vmpwd is forwarded into processQuickCreate()/voicemail — register it too so a
+		// downstream exception echoing it gets scrubbed. markSecret no-ops on the empty default.
+		$vmpwd = $this->markSecret($params['vmpwd'] ?? '');
 		$email = $params['email'] ?? '';
 		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
 
@@ -96,9 +100,9 @@ class AddExtension extends AbstractTool {
 		try {
 			if (empty($existing) || empty($existing['id'])) {
 				if (!empty($params['umpassword'])) {
-					$umPwd = $params['umpassword'];
+					$umPwd = $this->markSecret($params['umpassword']);
 				} else {
-					$umPwd = bin2hex(random_bytes(8));
+					$umPwd = $this->markSecret(bin2hex(random_bytes(8)));
 					$umPasswordWasGenerated = true;
 				}
 				$res = $userman->addUser($ext, $umPwd, $ext, $name, $extraData);
@@ -107,7 +111,7 @@ class AddExtension extends AbstractTool {
 					$umCreated = !empty($email) ? 'created_with_email' : 'created';
 					$umPasswordToReturn = $umPwd;
 				} else {
-					$umCreated = 'failed: ' . ($res['message'] ?? 'unknown error');
+					$umCreated = 'failed: ' . $this->scrubKnownSecrets($res['message'] ?? 'unknown error');
 				}
 			} elseif (!empty($email)) {
 				$userman->updateUserExtraData((int)$existing['id'], ['email' => $email]);
@@ -118,7 +122,7 @@ class AddExtension extends AbstractTool {
 				$umCreated = 'exists';
 			}
 		} catch (\Throwable $e) {
-			$umCreated = 'failed: ' . $e->getMessage();
+			$umCreated = 'failed: ' . $this->scrubKnownSecrets($e->getMessage());
 		}
 
 		// Wire UCP access the same way Userman::processQuickCreate does for GUI-created users:
@@ -153,7 +157,7 @@ class AddExtension extends AbstractTool {
 					$userman->updateUserUcpByTemplate($userId, $tempid);
 				}
 			} catch (\Throwable $e) {
-				$umCreated = ($umCreated ?: 'created') . ' (ucp_wiring_failed: ' . $e->getMessage() . ')';
+				$umCreated = ($umCreated ?: 'created') . ' (ucp_wiring_failed: ' . $this->scrubKnownSecrets($e->getMessage()) . ')';
 			}
 		}
 
@@ -163,7 +167,12 @@ class AddExtension extends AbstractTool {
 			$resetHint = !empty($email)
 				? "Reset later in User Manager or via the UCP \"Forgot Password\" link."
 				: "Reset later in User Manager (no email on file, so the UCP \"Forgot Password\" link won't work until one is added).";
-			$message .= "\n\nUCP password{$genNote}: `{$umPasswordToReturn}` — save it now. {$resetHint}";
+			// SEC-3: do NOT embed the password in this free-text message. redactSensitive()
+			// matches by array KEY, so a secret inside `message` would persist UNredacted in
+			// oc_audit_log.detail. The password is returned under the 'umpassword' key (which
+			// IS redacted in the audit log) and surfaced to the user by the chat formatter's
+			// fm_add_extension case and the raw API/MCP response.
+			$message .= "\n\nA UCP password{$genNote} was set for this extension — see the credential below. {$resetHint}";
 		}
 
 		return [

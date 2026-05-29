@@ -14,11 +14,18 @@ class EnableVoicemail extends AbstractTool {
 	public function execute($params, $context) {
 		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
 		$ext = $params['ext'];
-		$pwd = $params['password'] ?? '1234';
+		// SEC-3: register the PIN so runTool's catch scrubs it from any downstream
+		// BMO exception (e.g. Voicemail->addMailbox()) before it reaches the LLM or audit log.
+		$pwd = $this->markSecret($params['password'] ?? '1234');
 		$user = $this->freepbx->Core->getUser($ext);
 		if (empty($user)) throw new \Exception("Extension {$ext} not found");
 		if (!$confirm) {
-			return ['dry_run' => true, 'message' => "Would enable voicemail on extension {$ext} with password {$pwd}. Reply yes to confirm."];
+			// SEC-3: don't echo the PIN into the message — dry-run outcomes are audited and
+			// redactSensitive() matches by array key, so any PIN literal in `message` would
+			// persist unredacted in oc_audit_log.detail. Describe it without revealing it
+			// (including the default — keep this branch literal-free too).
+			$pwdNote = isset($params['password']) ? 'the password you provided' : 'the default voicemail password';
+			return ['dry_run' => true, 'message' => "Would enable voicemail on extension {$ext} with {$pwdNote}. Reply yes to confirm."];
 		}
 		$this->freepbx->Voicemail->addMailbox($ext, ['vm' => 'enabled', 'name' => $user['name'], 'vmpwd' => $pwd, 'email' => '', 'attach' => 'attach=no', 'envelope' => 'envelope=no', 'vmdelete' => 'vmdelete=no', 'saycid' => 'saycid=no']);
 		return ['dry_run' => false, 'message' => "Voicemail enabled on extension {$ext}", 'needs_reload' => true];

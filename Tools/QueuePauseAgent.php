@@ -8,6 +8,9 @@ class QueuePauseAgent extends AbstractTool {
 	public function validate($params) {
 		if (empty($params['queue'])) return 'Parameter "queue" is required';
 		if (empty($params['ext'])) return 'Parameter "ext" is required';
+		// AMI-framing injection defense: `queue` and `ext` flow into AMI headers (ext also into "PJSIP/<ext>").
+		if (!preg_match('/^[a-zA-Z0-9._-]+$/', $params['queue'])) return 'Parameter "queue" must be alphanumeric (with . _ - allowed)';
+		if (!ctype_digit((string)$params['ext'])) return 'Parameter "ext" must be digits';
 		return true;
 	}
 	public function permissionLevel() { return self::PERM_WRITE; }

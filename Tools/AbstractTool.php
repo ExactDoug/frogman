@@ -22,6 +22,43 @@ abstract class AbstractTool {
 	abstract public function execute($params, $context);
 
 	/**
+	 * SEC-3 (error path): a tool that handles a secret registers its cleartext value
+	 * here. The framework (Frogman::runTool catch) and the tool itself can then scrub
+	 * that exact value out of any free-text (e.g. a downstream BMO exception message)
+	 * before it reaches the LLM/MCP response OR the audit log. redactSensitive() only
+	 * matches by array KEY, so a secret echoed inside an exception string would slip
+	 * past it — this is the value-based counterpart that closes that gap.
+	 */
+	private $secretsToScrub = [];
+
+	/** Register a secret value so it can be scrubbed from error text. Returns $value unchanged. */
+	protected function markSecret($value) {
+		if (is_string($value) && $value !== '') {
+			$this->secretsToScrub[] = $value;
+		}
+		return $value;
+	}
+
+	/** Replace every registered secret value with [REDACTED] in free-text (exception messages, etc). */
+	public function scrubKnownSecrets($text) {
+		if (!is_string($text)) return $text;
+		foreach ($this->secretsToScrub as $s) {
+			$text = str_replace($s, '[REDACTED]', $text);
+		}
+		return $text;
+	}
+
+	/**
+	 * Clear the registered-secret list. Tools are cached singletons (Frogman::loadTools),
+	 * so without this a secret marked in one call — e.g. a default PIN like '1234' — would
+	 * stay resident and over-redact unrelated output on later calls. runTool() calls this
+	 * before each execute() to scope the scrub list to a single run.
+	 */
+	public function resetSecrets() {
+		$this->secretsToScrub = [];
+	}
+
+	/**
 	 * Permission level required: 'read', 'write', or 'admin'.
 	 * Override in subclass. Default is 'read'.
 	 */

@@ -17,7 +17,12 @@ class FwconsoleCmd extends AbstractTool {
 		// prefix-match a longer subcommand name (e.g. `contextual`, hypothetical
 		// future `context-foo`). Every alternation entry must match either a full
 		// token to end-of-string or be followed by a space (then args).
-		$allowed = '/^(ma\s+(list|install|uninstall|enable|disable|upgrade|upgradeall|download)|sa\s+(info|update)|pm2|reload|restart|start|stop|chown|status|--version|-V|context|certificates)(\s|$)/i';
+		//
+		// NOTE: `pm2` is deliberately NOT in this allowlist. `fwconsole pm2 <sub>`
+		// covers mutating subcommands (restart/stop/delete/kill) that this generic
+		// tool treated as read-only, bypassing the confirm gate. PM2 process control
+		// goes through the dedicated, confirm-gated `fm_pm2_manage` tool instead.
+		$allowed = '/^(ma\s+(list|install|uninstall|enable|disable|upgrade|upgradeall|download)|sa\s+(info|update)|reload|restart|start|stop|chown|status|--version|-V|context|certificates)(\s|$)/i';
 		if (!preg_match($allowed, $args)) {
 			return 'Command not in allowed list. Use specific Frogman tools instead.';
 		}
@@ -29,7 +34,9 @@ class FwconsoleCmd extends AbstractTool {
 		$args = $params['args'];
 		$confirm = !empty($params['confirm']) && $params['confirm'] === true;
 		// Same trailing-anchor fix as the allowlist above — keep these in sync.
-		$readOnly = preg_match('/^(ma\s+list|sa\s+info|pm2|status|--version|-V|context)(\s|$)/i', $args);
+		// `pm2` removed: it is no longer allowed at all (see allowlist note), and it
+		// must never be classified read-only since pm2 subcommands mutate process state.
+		$readOnly = preg_match('/^(ma\s+list|sa\s+info|status|--version|-V|context)(\s|$)/i', $args);
 		if (!$readOnly && !$confirm) {
 			return ['dry_run' => true, 'message' => "Would run: fwconsole {$args}."];
 		}
