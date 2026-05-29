@@ -7,6 +7,8 @@ class PjsipQualify extends AbstractTool {
 	public function description() { return 'Ping/qualify a PJSIP endpoint to check if it is reachable. Params: ext (required).'; }
 	public function validate($params) {
 		if (empty($params['ext'])) return 'Parameter "ext" is required';
+		// AMI-framing injection defense: `ext` flows into the PJSIPQualify Endpoint header.
+		if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $params['ext'])) return 'Parameter "ext" must be alphanumeric';
 		return true;
 	}
 	public function execute($params, $context) {

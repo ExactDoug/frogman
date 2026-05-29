@@ -8,6 +8,11 @@ class TransferCall extends AbstractTool {
 	public function validate($params) {
 		if (empty($params['channel'])) return 'Parameter "channel" is required';
 		if (empty($params['dest'])) return 'Parameter "dest" is required';
+		// AMI-framing injection defense: both `channel` and `dest` flow into AMI Redirect headers.
+		// Channel charset covers real Asterisk shapes incl. Local/1001@from-internal-0000004f;2
+		// and feature-code / E.164 legs like Local/*97@... and Local/+15551234567@...
+		if (!preg_match('/^[a-zA-Z0-9._\/@;*#+-]+$/', $params['channel'])) return 'Parameter "channel" contains invalid characters';
+		if (!preg_match('/^[0-9*#+]{1,20}$/', (string)$params['dest'])) return 'Parameter "dest" must be digits or feature-code characters (* # +)';
 		return true;
 	}
 	public function permissionLevel() { return self::PERM_WRITE; }

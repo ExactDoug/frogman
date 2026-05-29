@@ -2426,6 +2426,21 @@ class Frogman extends \FreePBX_Helpers implements \BMO {
 				}
 				return implode("\n", $lines);
 
+			case 'fm_add_extension':
+				$out = $this->formatGenericResult($data, $result['auditId']);
+				// SEC-3: the UCP password is deliberately kept out of `message` (so it never
+				// lands in oc_audit_log.detail). Surface it here, in the live chat reply only —
+				// formatToolResult receives the un-redacted result, the audit log does not.
+				if (!empty($data['umpassword'])) {
+					// umpassword can be caller-supplied (params['umpassword']), so sanitize
+					// before interpolating into chat markdown — a backtick or {{cmd:...}} in
+					// the value would otherwise break out of the inline-code wrapper and inject
+					// UI markup. No-op on auto-generated (hex) passwords, the common case.
+					$ucp = $this->sanitizeForChat($data['umpassword']);
+					$out .= "\n\n🔑 **UCP password:** `{$ucp}` — save it now.";
+				}
+				return $out;
+
 			default:
 				return $this->formatGenericResult($data, $result['auditId']);
 		}

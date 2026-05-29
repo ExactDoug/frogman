@@ -163,7 +163,12 @@ class AddExtension extends AbstractTool {
 			$resetHint = !empty($email)
 				? "Reset later in User Manager or via the UCP \"Forgot Password\" link."
 				: "Reset later in User Manager (no email on file, so the UCP \"Forgot Password\" link won't work until one is added).";
-			$message .= "\n\nUCP password{$genNote}: `{$umPasswordToReturn}` — save it now. {$resetHint}";
+			// SEC-3: do NOT embed the password in this free-text message. redactSensitive()
+			// matches by array KEY, so a secret inside `message` would persist UNredacted in
+			// oc_audit_log.detail. The password is returned under the 'umpassword' key (which
+			// IS redacted in the audit log) and surfaced to the user by the chat formatter's
+			// fm_add_extension case and the raw API/MCP response.
+			$message .= "\n\nA UCP password{$genNote} was set for this extension — see the credential below. {$resetHint}";
 		}
 
 		return [
